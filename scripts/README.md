@@ -47,8 +47,8 @@ All packaged files are staged into the `releases/` folder at the repository root
 
 ```text
 releases/
-├── BUMBLER_XD-v1.0.2-Windows-x64.zip       # Full distribution package (Standalone + VST3 + Docs)
-├── BUMBLER_XD-v1.0.2-VST3-Windows-x64.zip  # VST3-only distribution package
+├── BUMBLER_XD-v1.0.3-Windows-x64.zip       # Full distribution package (Standalone + VST3 + Docs)
+├── BUMBLER_XD-v1.0.3-VST3-Windows-x64.zip  # VST3-only distribution package
 └── SHA256SUMS.txt                          # SHA-256 cryptographic checksums manifest
 ```
 
@@ -58,7 +58,7 @@ releases/
 Designed for general end users and DAW producers requiring both the standalone synthesizer application and the VST3 plugin:
 
 ```text
-BUMBLER_XD-v1.0.2-Windows-x64.zip
+BUMBLER_XD-v1.0.3-Windows-x64.zip
 ├── Bumbler XD.exe                     # Standalone synthesizer executable
 ├── Bumbler XD.vst3/                   # VST3 plugin bundle directory hierarchy
 │   └── Contents/
@@ -73,7 +73,7 @@ BUMBLER_XD-v1.0.2-Windows-x64.zip
 Tailored for automated DAW plugin installers, package managers, and producers who exclusively use VST3 hosts:
 
 ```text
-BUMBLER_XD-v1.0.2-VST3-Windows-x64.zip
+BUMBLER_XD-v1.0.3-VST3-Windows-x64.zip
 ├── Bumbler XD.vst3/                   # VST3 plugin bundle directory hierarchy
 │   └── Contents/
 │       ├── x86_64-win/
@@ -88,8 +88,8 @@ BUMBLER_XD-v1.0.2-VST3-Windows-x64.zip
 Following archive creation, the script computes standard SHA-256 hashes for all `.zip` files in `releases/` starting with `BUMBLER_XD` and outputs them in standard GNU `sha256sum` format:
 
 ```text
-<sha256_hash>  BUMBLER_XD-v1.0.2-VST3-Windows-x64.zip
-<sha256_hash>  BUMBLER_XD-v1.0.2-Windows-x64.zip
+<sha256_hash>  BUMBLER_XD-v1.0.3-VST3-Windows-x64.zip
+<sha256_hash>  BUMBLER_XD-v1.0.3-Windows-x64.zip
 ```
 
 #### Integrity Verification Commands

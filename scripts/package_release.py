@@ -7,7 +7,7 @@ release_dir = os.path.join(root_dir, "releases")
 build_dir = os.path.join(root_dir, "build", "BumblerXD_artefacts", "Release")
 
 os.makedirs(release_dir, exist_ok=True)
-version = "1.0.2"
+version = "1.0.3"
 
 # 1. Package Windows-x64 full zip (Standalone + VST3 + docs)
 zip_path = os.path.join(release_dir, f"BUMBLER_XD-v{version}-Windows-x64.zip")

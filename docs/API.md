@@ -6,7 +6,7 @@ Comprehensive API documentation, threading contracts, real-time safety guarantee
 
 ## Table of Contents
 
-- [1. Architecture Overview](#1-architecture-overview)
+- [1. Architecture Overview & Quickstart](#1-architecture-overview--quickstart)
 - [2. Public Header Hierarchy](#2-public-header-hierarchy)
 - [3. Core DSP Classes Reference](#3-core-dsp-classes-reference)
   - [3.1 BumblerEngine](#31-bumblerengine)
@@ -24,10 +24,11 @@ Comprehensive API documentation, threading contracts, real-time safety guarantee
   - [5.2 Game Engines (Unreal Engine 5 & Unity)](#52-game-engines-unreal-engine-5--unity)
   - [5.3 Embedded Systems & Headless Linux (ALSA / JACK / Bela)](#53-embedded-systems--headless-linux-alsa--jack--bela)
 - [6. Complete End-to-End C++20 Example](#6-complete-end-to-end-c20-example)
+- [7. Known Limitations & Architectural Boundaries](#7-known-limitations--architectural-boundaries)
 
 ---
 
-## 1. Architecture Overview
+## 1. Architecture Overview & Quickstart
 
 `bumbler_dsp_core` is an ISO C++20 static DSP library providing the complete sound generation, polyphonic voice allocation, filtering, and character circuits of the Bumbler XD synthesizer.
 
@@ -36,6 +37,68 @@ Comprehensive API documentation, threading contracts, real-time safety guarantee
 - **POD Parameter Exchange:** Uses a 55-member plain-old-data structure (`ParameterSnapshot`) for atomic, lock-free parameter handoffs between GUI/automation threads and real-time audio threads ($<45\text{ ns}$ extraction latency).
 - **Hard Real-Time Guarantees:** All audio rendering methods are annotated `noexcept` and guarantee deterministic execution time without mutexes, spinlocks, or operating system blocking calls.
 - **Host Agnostic:** Contains zero framework dependencies (JUCE is strictly confined to the plugin wrapper layer). The core library compiles cleanly with MSVC, Apple Clang, and GCC.
+
+### Minimal C++20 Quickstart (~50 Lines)
+
+The following self-contained example (`examples/minimal_integration.cpp`) shows the absolute minimum C++20 code required to instantiate `BumblerEngine`, prepare it at 48 kHz / 512 block size, load a factory preset `ParameterSnapshot`, trigger a MIDI Note On (note 60, velocity 0.8), render 512 stereo samples into raw float arrays, and verify audio output—with zero JUCE GUI, windowing, or CLI dependencies:
+
+```cpp
+#include <iostream>
+#include <array>
+#include <cmath>
+#include <algorithm>
+#include "BumblerEngine.h"
+#include "ParameterSnapshot.h"
+#include "parameters/PresetParameters.h"
+
+int main() {
+    // 1. Instantiate the headless C++20 DSP engine
+    bumbler::BumblerEngine engine;
+
+    constexpr double sampleRate = 48000.0;
+    constexpr int blockSize = 512;
+
+    // 2. Prepare engine at 48 kHz with 512 max block size
+    engine.prepare(sampleRate, blockSize);
+    engine.reset();
+
+    // 3. Load a factory preset ParameterSnapshot (Preset 0: Acid Bass)
+    const auto& presets = bumbler::getFactoryPresets();
+    const bumbler::ParameterSnapshot params = presets[0].params;
+
+    // 4. Trigger MIDI Note On: Note 60 (Middle C), Velocity 0.8
+    engine.processMidiEvent(0x90, 60, 0.8f);
+
+    // 5. Render 512 stereo samples into float arrays
+    std::array<float, blockSize> leftChannel{};
+    std::array<float, blockSize> rightChannel{};
+    float* outputChannels[2] = { leftChannel.data(), rightChannel.data() };
+
+    engine.renderBlock(outputChannels, 2, blockSize, params);
+
+    // 6. Verify audio output (non-silent, finite samples)
+    float peak = 0.0f;
+    bool hasNonZero = false;
+    bool allFinite = true;
+
+    for (int i = 0; i < blockSize; ++i) {
+        const float l = leftChannel[i];
+        const float r = rightChannel[i];
+        if (!std::isfinite(l) || !std::isfinite(r)) allFinite = false;
+        if (std::abs(l) > 1e-5f || std::abs(r) > 1e-5f) hasNonZero = true;
+        peak = std::max({peak, std::abs(l), std::abs(r)});
+    }
+
+    if (allFinite && hasNonZero) {
+        std::cout << "[SUCCESS] BumblerEngine rendered " << blockSize 
+                  << " stereo samples. Peak: " << peak << " (" << presets[0].name << ")\n";
+        return 0;
+    }
+
+    std::cerr << "[FAILURE] Audio output verification failed.\n";
+    return 1;
+}
+```
 
 ---
 
@@ -635,3 +698,44 @@ int main() {
     return 0;
 }
 ```
+
+---
+
+## 7. Known Limitations & Architectural Boundaries
+
+`bumbler_dsp_core` prioritizes hard real-time safety, zero-allocation determinism, and faithful recreation of the EDP Wasp XT hardware architecture. In service of these architectural commitments, several explicit boundaries are enforced across the DSP engine and host integration layers:
+
+### 7.1 Fixed 16-Voice Polyphony Ceiling
+- **Preallocated Memory Guarantee:** The polyphony ceiling is fixed at compile-time to 16 concurrent voices (`static constexpr int kMaxVoices = 16`). All voice synthesis structures (`BumblerVoice`), filter memories, modulation accumulators, and crossfade buffers are pre-allocated in static arrays (`std::array<BumblerVoice, 16>`).
+- **Zero Real-Time Allocations:** This upper ceiling guarantees strictly zero heap allocations (`malloc`, `free`, `new`, `delete`) and zero pointer indirection or memory fragmentation during audio rendering.
+- **Dynamic Downward Scaling:** Hosts can dynamically throttle polyphony between 1 and 16 voices via `BumblerVoiceManager::setPolyphonyLimit(int limit)` to conserve CPU on resource-constrained platforms (e.g. mobile or embedded devices). However, increasing polyphony beyond 16 requires modifying `kMaxVoices` and recompiling the core library.
+
+### 7.2 Channel-Global Pitch Bend & Continuous Controllers (No Per-Note MPE)
+- **Standard MIDI 1.0 Architecture:** Pitch bend, sustain pedal (CC 64), and continuous modulation controllers operate on a global, channel-wide basis across all active voices.
+- **No MPE Support:** MIDI Polyphonic Expression (MPE / MIDI 2.0 per-note pitch bend, polyphonic aftertouch, and per-note timbre dimensions) is not supported in the current engine topology. When a pitch bend or CC event is received via `BumblerEngine::processMidiEvent()`, the resulting modulation is dispatched uniformly to all active sounding voices.
+
+### 7.3 Filter Cutoff Frequency Clamping Bounds
+- **Numerical Stability of Trapezoidal Integrators:** The 6-mode Wasp filter is modeled using Zero-Delay Feedback (ZDF) state-variable filter (SVF) topologies with bilinear trapezoidal integration. The continuous-to-discrete frequency mapping requires the pre-warping evaluation:
+
+```math
+g = \tan\left(\frac{\pi f_c}{f_s}\right)
+```
+
+- **Nyquist Divergence Guard:** As $f_c \to f_s / 2$ (the Nyquist limit), $\tan(\pi f_c / f_s) \to \infty$. This would cause catastrophic floating-point overflow and numerical divergence in the loop denominator $d = 1.0 + g(g + k)$.
+- **Strict Clamping Enclosure:** To guarantee unconditional numerical stability across all sample rates ($44.1\text{ kHz}$ to $384\text{ kHz}$), modulated filter cutoff frequencies are defensively clamped to:
+
+```math
+f_c \in \left[20.0\text{ Hz}, \; \min\left(20000.0\text{ Hz}, \; 0.49 \cdot f_s\right)\right]
+```
+
+At $44.1\text{ kHz}$, the upper cutoff ceiling is capped at $20000.0\text{ Hz}$ ($0.4535 \cdot f_s$). At sub-audio modulation extremes, cutoffs below $20.0\text{ Hz}$ are arrested to prevent integrator state stagnation.
+
+### 7.4 Block-Rate APVTS Automation Snapshots
+- **Block-Boundary Parameter Updates:** Parameter exchange between the host DAW / UI thread and the real-time audio thread operates via atomic snapshot exchange (`ParameterSnapshot`) sampled once at the entry of each audio block (`renderBlock()`).
+- **Intra-Block Resolution:** Per-sample modulations generated internally by LFO 1, LFO 2, the MOD envelope, and velocity scaling are computed at full audio rate. However, external DAW host automation envelopes (e.g. VST3 parameter curves drawn in the DAW arrangement timeline) are sampled at buffer boundaries (typically every 64 to 512 samples).
+- **Extremely Large Buffers:** In hosts running uncharacteristically large buffer sizes (e.g. $\ge 1024$ samples) without sub-block parameter splitting, rapid automation jumps may exhibit block-rate staircase discretization.
+
+### 7.5 Single Stereo Output Bus Topology
+- **Master Bus Architecture:** The synthesis engine renders to a dedicated 2-channel stereo bus (Left / Right), with an integrated single-channel mono downmix mode.
+- **No Multi-Bus Stem Routing:** Individual voice outputs, dedicated per-oscillator wet/dry stems, sidechain input buses, and multi-channel surround formats (e.g. 5.1, 7.1.4 Dolby Atmos) are not supported. All voice outputs are summed into the common master stereo bus prior to entering the master character output circuits (asymmetric overdrive, 1-pole tone tilt, 5ms Haas decorrelation, and 10 Hz DC blocking).
+

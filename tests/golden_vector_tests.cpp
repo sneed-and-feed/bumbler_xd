@@ -15,6 +15,9 @@
 #include "BumblerEngine.h"
 #include "BumblerVoiceManager.h"
 #include "BumblerVoice.h"
+#include "BumblerOscillator.h"
+#include "WaspFilter.h"
+#include "CharacterCircuits.h"
 #include "parameters/PresetParameters.h"
 
 // ============================================================================
@@ -374,7 +377,309 @@ void testGoldenFixtureVectors() {
 }
 
 // ============================================================================
-// Test 5: Hard Real-Time Heap Safety (0 Allocations During Processing)
+// Test 5: Per-Algorithm Isolated Golden Vectors & Unit-Level Regression
+// Validates isolated core DSP components against bit-accurate CSV fixtures:
+//   - 4th-Order PolyBLEP Saw Wave at 440 Hz (fs=44100)
+//   - 4th-Order PolyBLEP Pulse Wave at 440 Hz (PW=0.50 & PW=0.25)
+//   - ZDF SVF LP12 2-Pole Lowpass Step Response (fc=1000, R=0.707)
+//   - ZDF SVF LP24 FAT 4-Pole Lowpass Step Response with CMOS Saturation (fc=1000, reso=0.75)
+//   - Haas 5ms Stereo Psychoacoustic Decorrelator Impulse Response (fs=48000, delay=240)
+// ============================================================================
+void testAlgorithmLevelGoldenVectors() {
+    bumbler_test::ScopedNoDenormalsGuard guard;
+    const std::string fixtureDir = findFixtureDirectory();
+
+    auto computeMetrics = [](const std::vector<float>& live, const std::vector<float>& golden,
+                             float& maxDelta, double& snrDb) {
+        maxDelta = 0.0f;
+        double sigP = 0.0;
+        double diffP = 0.0;
+        for (size_t i = 0; i < live.size(); ++i) {
+            const float diff = live[i] - golden[i];
+            const float absDiff = std::abs(diff);
+            if (absDiff > maxDelta) maxDelta = absDiff;
+            sigP += static_cast<double>(golden[i]) * static_cast<double>(golden[i]);
+            diffP += static_cast<double>(diff) * static_cast<double>(diff);
+        }
+        snrDb = (diffP <= 1.0e-20) ? 240.0 : (10.0 * std::log10(sigP / diffP));
+    };
+
+    // ------------------------------------------------------------------------
+    // A. 4th-Order PolyBLEP Saw Waveform (440 Hz, fs=44100)
+    // ------------------------------------------------------------------------
+    {
+        constexpr int kSamples = 100;
+        bumbler::BumblerOscillator osc;
+        osc.prepare(44100.0);
+        osc.setFrequency(440.0f);
+        osc.setWaveform(bumbler::OscWaveform::Saw);
+        osc.reset(0.0f);
+
+        std::vector<float> liveSaw(kSamples);
+        for (int i = 0; i < kSamples; ++i) {
+            liveSaw[static_cast<size_t>(i)] = osc.processSample(0.0f);
+        }
+
+        const std::string sawPath = fixtureDir + "/polyblep_saw_golden.csv";
+        std::ifstream inFile(sawPath);
+        std::vector<float> goldenSaw;
+        goldenSaw.reserve(kSamples);
+
+        if (inFile.is_open()) {
+            std::string line;
+            while (std::getline(inFile, line)) {
+                if (line.empty() || line[0] == '#' || line.find("sample_idx") != std::string::npos) continue;
+                std::stringstream ss(line);
+                std::string token;
+                std::vector<std::string> cols;
+                while (std::getline(ss, token, ',')) cols.push_back(token);
+                if (cols.size() >= 5) {
+                    try {
+                        goldenSaw.push_back(std::stof(cols[4]));
+                    } catch (...) {}
+                }
+            }
+        }
+
+        if (goldenSaw.size() == static_cast<size_t>(kSamples)) {
+            float maxDelta = 0.0f;
+            double snrDb = 0.0;
+            computeMetrics(liveSaw, goldenSaw, maxDelta, snrDb);
+            std::cout << "  Algorithm [PolyBLEP Saw 440Hz] Match: SNR = " << snrDb 
+                      << " dB, Max Delta = " << maxDelta << "\n";
+            TEST_ASSERT(maxDelta < 1.0e-4f, "PolyBLEP Saw sample delta must be < 1e-4");
+            TEST_ASSERT(snrDb > 120.0, "PolyBLEP Saw SNR must exceed 120 dB");
+        } else {
+            TEST_ASSERT(false, "Failed to load polyblep_saw_golden.csv fixture");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // B. 4th-Order PolyBLEP Pulse Waveform (440 Hz, fs=44100, PW=0.50 & PW=0.25)
+    // ------------------------------------------------------------------------
+    {
+        constexpr int kSamples = 100;
+        bumbler::BumblerOscillator osc50;
+        osc50.prepare(44100.0);
+        osc50.setFrequency(440.0f);
+        osc50.setWaveform(bumbler::OscWaveform::Square);
+        osc50.setPulseWidth(0.50f);
+        osc50.reset(0.0f);
+
+        bumbler::BumblerOscillator osc25;
+        osc25.prepare(44100.0);
+        osc25.setFrequency(440.0f);
+        osc25.setWaveform(bumbler::OscWaveform::Square);
+        osc25.setPulseWidth(0.25f);
+        osc25.reset(0.0f);
+
+        std::vector<float> livePulse50(kSamples), livePulse25(kSamples);
+        for (int i = 0; i < kSamples; ++i) {
+            livePulse50[static_cast<size_t>(i)] = osc50.processSample(0.0f);
+            livePulse25[static_cast<size_t>(i)] = osc25.processSample(0.0f);
+        }
+
+        const std::string pulsePath = fixtureDir + "/polyblep_pulse_golden.csv";
+        std::ifstream inFile(pulsePath);
+        std::vector<float> goldenPulse50, goldenPulse25;
+        goldenPulse50.reserve(kSamples);
+        goldenPulse25.reserve(kSamples);
+
+        if (inFile.is_open()) {
+            std::string line;
+            while (std::getline(inFile, line)) {
+                if (line.empty() || line[0] == '#' || line.find("sample_idx") != std::string::npos) continue;
+                std::stringstream ss(line);
+                std::string token;
+                std::vector<std::string> cols;
+                while (std::getline(ss, token, ',')) cols.push_back(token);
+                if (cols.size() >= 8) {
+                    try {
+                        goldenPulse50.push_back(std::stof(cols[4]));
+                        goldenPulse25.push_back(std::stof(cols[7]));
+                    } catch (...) {}
+                }
+            }
+        }
+
+        if (goldenPulse50.size() == static_cast<size_t>(kSamples) && goldenPulse25.size() == static_cast<size_t>(kSamples)) {
+            float maxDelta50 = 0.0f, maxDelta25 = 0.0f;
+            double snrDb50 = 0.0, snrDb25 = 0.0;
+            computeMetrics(livePulse50, goldenPulse50, maxDelta50, snrDb50);
+            computeMetrics(livePulse25, goldenPulse25, maxDelta25, snrDb25);
+
+            std::cout << "  Algorithm [PolyBLEP Pulse PW=0.50] Match: SNR = " << snrDb50 
+                      << " dB, Max Delta = " << maxDelta50 << "\n";
+            std::cout << "  Algorithm [PolyBLEP Pulse PW=0.25] Match: SNR = " << snrDb25 
+                      << " dB, Max Delta = " << maxDelta25 << "\n";
+
+            TEST_ASSERT(maxDelta50 < 1.0e-4f, "PolyBLEP Pulse PW=0.50 sample delta must be < 1e-4");
+            TEST_ASSERT(snrDb50 > 120.0, "PolyBLEP Pulse PW=0.50 SNR must exceed 120 dB");
+            TEST_ASSERT(maxDelta25 < 1.0e-4f, "PolyBLEP Pulse PW=0.25 sample delta must be < 1e-4");
+            TEST_ASSERT(snrDb25 > 120.0, "PolyBLEP Pulse PW=0.25 SNR must exceed 120 dB");
+        } else {
+            TEST_ASSERT(false, "Failed to load polyblep_pulse_golden.csv fixture");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // C. ZDF 2-Pole Lowpass Filter Step Response (LP12, fc=1000 Hz, R=0.707)
+    // ------------------------------------------------------------------------
+    {
+        constexpr int kSamples = 100;
+        bumbler::WaspFilter filter;
+        filter.prepare(44100.0);
+        filter.reset();
+
+        std::vector<float> liveLp12(kSamples);
+        for (int i = 0; i < kSamples; ++i) {
+            liveLp12[static_cast<size_t>(i)] = filter.processSample(1.0f, 1000.0, 0.707, bumbler::WaspFilterMode::LP12);
+        }
+
+        const std::string lp12Path = fixtureDir + "/zdf_svf_lp12_step_golden.csv";
+        std::ifstream inFile(lp12Path);
+        std::vector<float> goldenLp12;
+        goldenLp12.reserve(kSamples);
+
+        if (inFile.is_open()) {
+            std::string line;
+            while (std::getline(inFile, line)) {
+                if (line.empty() || line[0] == '#' || line.find("sample_idx") != std::string::npos) continue;
+                std::stringstream ss(line);
+                std::string token;
+                std::vector<std::string> cols;
+                while (std::getline(ss, token, ',')) cols.push_back(token);
+                if (cols.size() >= 7) {
+                    try {
+                        goldenLp12.push_back(std::stof(cols[6]));
+                    } catch (...) {}
+                }
+            }
+        }
+
+        if (goldenLp12.size() == static_cast<size_t>(kSamples)) {
+            float maxDelta = 0.0f;
+            double snrDb = 0.0;
+            computeMetrics(liveLp12, goldenLp12, maxDelta, snrDb);
+            std::cout << "  Algorithm [ZDF SVF LP12 Step] Match: SNR = " << snrDb 
+                      << " dB, Max Delta = " << maxDelta << "\n";
+            TEST_ASSERT(maxDelta < 1.0e-4f, "ZDF SVF LP12 sample delta must be < 1e-4");
+            TEST_ASSERT(snrDb > 120.0, "ZDF SVF LP12 SNR must exceed 120 dB");
+        } else {
+            TEST_ASSERT(false, "Failed to load zdf_svf_lp12_step_golden.csv fixture");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // D. ZDF 4-Pole Lowpass FAT Step Response with CMOS Saturation (LP24 FAT, fc=1000 Hz, reso=0.75)
+    // ------------------------------------------------------------------------
+    {
+        constexpr int kSamples = 100;
+        bumbler::WaspFilter filter;
+        filter.prepare(44100.0);
+        filter.reset();
+
+        std::vector<float> liveLp24(kSamples);
+        for (int i = 0; i < kSamples; ++i) {
+            liveLp24[static_cast<size_t>(i)] = filter.processSample(1.0f, 1000.0, 0.75, bumbler::WaspFilterMode::LP24);
+        }
+
+        const std::string lp24Path = fixtureDir + "/zdf_svf_lp24_fat_step_golden.csv";
+        std::ifstream inFile(lp24Path);
+        std::vector<float> goldenLp24;
+        goldenLp24.reserve(kSamples);
+
+        if (inFile.is_open()) {
+            std::string line;
+            while (std::getline(inFile, line)) {
+                if (line.empty() || line[0] == '#' || line.find("sample_idx") != std::string::npos) continue;
+                std::stringstream ss(line);
+                std::string token;
+                std::vector<std::string> cols;
+                while (std::getline(ss, token, ',')) cols.push_back(token);
+                if (cols.size() >= 6) {
+                    try {
+                        goldenLp24.push_back(std::stof(cols[5]));
+                    } catch (...) {}
+                }
+            }
+        }
+
+        if (goldenLp24.size() == static_cast<size_t>(kSamples)) {
+            float maxDelta = 0.0f;
+            double snrDb = 0.0;
+            computeMetrics(liveLp24, goldenLp24, maxDelta, snrDb);
+            std::cout << "  Algorithm [ZDF SVF LP24 FAT Step] Match: SNR = " << snrDb 
+                      << " dB, Max Delta = " << maxDelta << "\n";
+            TEST_ASSERT(maxDelta < 1.0e-4f, "ZDF SVF LP24 FAT sample delta must be < 1e-4");
+            TEST_ASSERT(snrDb > 120.0, "ZDF SVF LP24 FAT SNR must exceed 120 dB");
+        } else {
+            TEST_ASSERT(false, "Failed to load zdf_svf_lp24_fat_step_golden.csv fixture");
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // E. Haas 5ms Stereo Psychoacoustic Decorrelator Impulse Response (fs=48000, delay=240)
+    // ------------------------------------------------------------------------
+    {
+        constexpr int kSamples = 300;
+        bumbler::DualModeVoiceDoubler doubler;
+        doubler.prepare(48000.0);
+        doubler.reset();
+
+        std::vector<float> monoIn(kSamples, 0.0f);
+        monoIn[0] = 1.0f; // Unit impulse at n = 0
+        std::vector<float> liveOutL(kSamples, 0.0f);
+        std::vector<float> liveOutR(kSamples, 0.0f);
+
+        doubler.process(monoIn.data(), liveOutL.data(), liveOutR.data(), kSamples, true, 48000.0);
+
+        const std::string haasPath = fixtureDir + "/haas_decorrelation_golden.csv";
+        std::ifstream inFile(haasPath);
+        std::vector<float> goldenOutL, goldenOutR;
+        goldenOutL.reserve(kSamples);
+        goldenOutR.reserve(kSamples);
+
+        if (inFile.is_open()) {
+            std::string line;
+            while (std::getline(inFile, line)) {
+                if (line.empty() || line[0] == '#' || line.find("sample_idx") != std::string::npos) continue;
+                std::stringstream ss(line);
+                std::string token;
+                std::vector<std::string> cols;
+                while (std::getline(ss, token, ',')) cols.push_back(token);
+                if (cols.size() >= 5) {
+                    try {
+                        goldenOutL.push_back(std::stof(cols[3]));
+                        goldenOutR.push_back(std::stof(cols[4]));
+                    } catch (...) {}
+                }
+            }
+        }
+
+        if (goldenOutL.size() == static_cast<size_t>(kSamples) && goldenOutR.size() == static_cast<size_t>(kSamples)) {
+            float maxDeltaL = 0.0f, maxDeltaR = 0.0f;
+            double snrDbL = 0.0, snrDbR = 0.0;
+            computeMetrics(liveOutL, goldenOutL, maxDeltaL, snrDbL);
+            computeMetrics(liveOutR, goldenOutR, maxDeltaR, snrDbR);
+
+            std::cout << "  Algorithm [Haas Decorrelator Left] Match: SNR = " << snrDbL 
+                      << " dB, Max Delta = " << maxDeltaL << "\n";
+            std::cout << "  Algorithm [Haas Decorrelator Right] Match: SNR = " << snrDbR 
+                      << " dB, Max Delta = " << maxDeltaR << "\n";
+
+            TEST_ASSERT(maxDeltaL < 1.0e-4f, "Haas Left sample delta must be < 1e-4");
+            TEST_ASSERT(snrDbL > 120.0, "Haas Left SNR must exceed 120 dB");
+            TEST_ASSERT(maxDeltaR < 1.0e-4f, "Haas Right sample delta must be < 1e-4");
+            TEST_ASSERT(snrDbR > 120.0, "Haas Right SNR must exceed 120 dB");
+        } else {
+            TEST_ASSERT(false, "Failed to load haas_decorrelation_golden.csv fixture");
+        }
+    }
+}
+
+// ============================================================================
+// Test 6: Hard Real-Time Heap Safety (0 Allocations During Processing)
 // ============================================================================
 void testRealtimeSafetyInvariants() {
     bumbler_test::ScopedNoDenormalsGuard guard;
@@ -417,6 +722,7 @@ int main() {
     RUN_TEST(testDeterministicRepeatabilityAndSNR);
     RUN_TEST(testAudioInvariants);
     RUN_TEST(testGoldenFixtureVectors);
+    RUN_TEST(testAlgorithmLevelGoldenVectors);
     RUN_TEST(testRealtimeSafetyInvariants);
 
     std::cout << "\n======================================================================\n";

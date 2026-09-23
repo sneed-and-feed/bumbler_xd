@@ -24,6 +24,7 @@
 
 - [**DSP Algorithms & Mathematical Architecture**](docs/DSP_ALGORITHMS.md): Comprehensive mathematical foundations, Mermaid signal flow block diagrams, 4th-order PolyBLEP piecewise polynomial derivations, Zero-Delay Feedback (ZDF) SVF bilinear integration, modeled CMOS 4069UB inverter saturation, Jacobi-Anger Bessel FM expansions, and vintage character circuits.
 - [**C++20 Core API Reference & Integration Guide**](docs/API.md): Complete public C++20 API documentation for `bumbler_dsp_core` (`BumblerEngine`, `BumblerVoiceManager`, `ParameterSnapshot`, `CharacterCircuits`), real-time safety contracts, lock-free parameter snapshot passing, and host integration patterns (DAWs, Unreal Engine 5, Unity, and embedded Linux).
+- [**Changelog & Version Compatibility Matrix**](CHANGELOG.md): Comprehensive release history adhering to Keep a Changelog and SemVer 2.0, API and APVTS parameter ID stability commitments, and platform compatibility matrix.
 
 ---
 
@@ -114,6 +115,7 @@ Compiled plugin bundles and standalone executables will be generated in:
 - Standalone: `build/BumblerXD_artefacts/Release/Standalone/Bumbler XD.exe`
 - VST3 Plugin: `build/BumblerXD_artefacts/Release/VST3/Bumbler XD.vst3`
 - Headless CLI Example: `build/Release/bumbler_headless_example.exe`
+- Minimal C++ Example: `build/Release/bumbler_minimal_example.exe`
 
 ---
 
@@ -182,6 +184,82 @@ cmake --build build --config Release --parallel $(nproc)
 
 # Run CTest verification suite under xvfb-run
 xvfb-run --auto-servernum ctest --test-dir build -C Release --output-on-failure
+```
+
+---
+
+## ⚡ Minimal C++ Quickstart
+
+For developers integrating `BumblerEngine` into games, DAW hosts, or embedded systems, Bumbler XD provides a self-contained ~50-line integration example ([`examples/minimal_integration.cpp`](examples/minimal_integration.cpp)) with **zero** JUCE GUI, windowing, or CLI parsing dependencies.
+
+It demonstrates the absolute minimum C++20 code needed to instantiate the engine, prepare it at 48 kHz / 512 block size, load a factory preset, trigger a MIDI Note On, render 512 stereo samples into raw float arrays, and verify audio output:
+
+```cpp
+#include <iostream>
+#include <array>
+#include <cmath>
+#include <algorithm>
+#include "BumblerEngine.h"
+#include "ParameterSnapshot.h"
+#include "parameters/PresetParameters.h"
+
+int main() {
+    // 1. Instantiate the headless C++20 DSP engine
+    bumbler::BumblerEngine engine;
+
+    constexpr double sampleRate = 48000.0;
+    constexpr int blockSize = 512;
+
+    // 2. Prepare engine at 48 kHz with 512 max block size
+    engine.prepare(sampleRate, blockSize);
+    engine.reset();
+
+    // 3. Load a factory preset ParameterSnapshot (Preset 0: Acid Bass)
+    const auto& presets = bumbler::getFactoryPresets();
+    const bumbler::ParameterSnapshot params = presets[0].params;
+
+    // 4. Trigger MIDI Note On: Note 60 (Middle C), Velocity 0.8
+    engine.processMidiEvent(0x90, 60, 0.8f);
+
+    // 5. Render 512 stereo samples into float arrays
+    std::array<float, blockSize> leftChannel{};
+    std::array<float, blockSize> rightChannel{};
+    float* outputChannels[2] = { leftChannel.data(), rightChannel.data() };
+
+    engine.renderBlock(outputChannels, 2, blockSize, params);
+
+    // 6. Verify audio output (non-silent, finite samples)
+    float peak = 0.0f;
+    bool hasNonZero = false;
+    bool allFinite = true;
+
+    for (int i = 0; i < blockSize; ++i) {
+        const float l = leftChannel[i];
+        const float r = rightChannel[i];
+        if (!std::isfinite(l) || !std::isfinite(r)) allFinite = false;
+        if (std::abs(l) > 1e-5f || std::abs(r) > 1e-5f) hasNonZero = true;
+        peak = std::max({peak, std::abs(l), std::abs(r)});
+    }
+
+    if (allFinite && hasNonZero) {
+        std::cout << "[SUCCESS] BumblerEngine rendered " << blockSize 
+                  << " stereo samples. Peak: " << peak << " (" << presets[0].name << ")\n";
+        return 0;
+    }
+
+    std::cerr << "[FAILURE] Audio output verification failed.\n";
+    return 1;
+}
+```
+
+### Building & Running the Minimal Example
+
+```powershell
+# Build minimal executable target
+cmake --build build --config Release --target bumbler_minimal_example
+
+# Run executable
+./build/Release/bumbler_minimal_example.exe
 ```
 
 ---
@@ -346,6 +424,33 @@ For complete empirical benchmark tables, multi-rate latency profiles, and FFT sp
 
 ---
 
+## Known Limitations & Architectural Boundaries
+
+Bumbler XD is architected to guarantee deterministic real-time audio thread safety, zero dynamic heap allocations, and faithful vintage EDP Wasp XT circuit dynamics. The following deliberate architectural boundaries govern the engine:
+
+1. **Fixed 16-Voice Ceiling (`kMaxVoices = 16`):**
+   - **Preallocated Memory Guarantee:** All 16 synthesis voices (`BumblerVoice`), filter states, and crossfade buffers are statically preallocated at initialization.
+   - **Zero Audio Thread Allocations:** Guarantees strictly 0 dynamic memory allocations (`malloc`, `free`, `new`, `delete`) and zero pointer indirection overhead in the audio rendering loop.
+   - **Polyphony Throttling:** Polyphony can be dynamically throttled from 1 to 16 voices via `setPolyphonyLimit()` to reduce CPU utilization on mobile or embedded devices, but cannot exceed 16 voices without recompiling the core DSP library.
+
+2. **Channel-Global Pitch Bend & Continuous Controllers (No Per-Note MPE):**
+   - **Standard MIDI 1.0 Single-Channel Model:** Pitch wheel bending ($\pm 12$ semitones), sustain pedal latching (CC 64), and modulation wheel data apply globally to all currently sounding voices.
+   - **No MPE Support:** MIDI Polyphonic Expression (MPE / MIDI 2.0 per-note pitch bend, polyphonic aftertouch, and per-note timbre dimensions) is not supported in the current engine topology.
+
+3. **Filter Cutoff Frequency Clamping Bounds ($20.0\text{ Hz}$ to $20000.0\text{ Hz}$ / $0.49 \cdot f_s$):**
+   - **ZDF SVF Numerical Stability:** The 6-mode Wasp filter uses bilinear trapezoidal integration with cutoff pre-warping $g = \tan(\pi f_c / f_s)$. Near Nyquist ($f_s / 2$), the tangent function approaches infinity.
+   - **Safe Clamping Enclosure:** To prevent floating-point overflow and numerical loop divergence in the algebraic denominator $d = 1.0 + g(g + k)$, effective modulated cutoff frequencies are clamped to $[20.0\text{ Hz}, \min(20000.0\text{ Hz}, 0.49 \cdot f_s)]$, guaranteeing unconditional stability across all sample rates ($44.1\text{ kHz}$ to $384\text{ kHz}$).
+
+4. **Block-Rate APVTS Automation Snapshots:**
+   - **Buffer-Boundary Synchronization:** Parameter exchange between DAW automation/GUI and the audio rendering thread occurs via lock-free atomic snapshot polling (`ParameterSnapshot`) evaluated once per audio block (`renderBlock()`).
+   - **Intra-Block Resolution:** Internal modulators (dual LFOs, MOD envelope, analog pitch drift) update per-sample. DAW host parameter automation envelopes update at block boundaries (typically every 64 to 512 samples). In hosts configured with unusually large buffers ($\ge 1024$ samples) without sub-block parameter splitting, rapid external automation ramps may exhibit block-rate staircase discretization.
+
+5. **Single Stereo Output Bus Topology:**
+   - **Master Bus Architecture:** Bumbler XD provides a dedicated 2-channel stereo master output bus (Left / Right) with an internal mono downmix mode.
+   - **No Multi-Out Stem Routing:** Individual voice outputs, separate wet/dry auxiliary effect sends, sidechain input buses, and multi-channel spatialization (5.1 / 7.1.4 Dolby Atmos) are not supported. All voice outputs are summed into the common master bus prior to processing through the master character output chain (asymmetric overdrive, 1-pole tone tilt, 5ms Haas decorrelation, and 10 Hz DC blocking).
+
+---
+
 ## Packaging & Release Automation
 
 Bumbler XD provides automated packaging scripts for generating production-ready distribution archives, standalone executables, VST3 bundles, and SHA-256 cryptographic manifests.
@@ -363,8 +468,8 @@ python scripts/package_release.py
 ```
 
 Generated release artifacts in `releases/`:
-- `releases/BUMBLER_XD-v1.0.2-Windows-x64.zip` (Full package: Standalone + VST3 + Documentation)
-- `releases/BUMBLER_XD-v1.0.2-VST3-Windows-x64.zip` (VST3-only plugin package)
+- `releases/BUMBLER_XD-v1.0.3-Windows-x64.zip` (Full package: Standalone + VST3 + Documentation)
+- `releases/BUMBLER_XD-v1.0.3-VST3-Windows-x64.zip` (VST3-only plugin package)
 - `releases/SHA256SUMS.txt` (GNU `sha256sum`-compatible cryptographic manifest)
 
 ---
