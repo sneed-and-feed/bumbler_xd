@@ -74,13 +74,22 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libasound2-dev \
-            libfreetype-dev \
+            libjack-jackd2-dev \
+            ladspa-sdk \
+            libcurl4-openssl-dev \
+            libfreetype6-dev \
             libfontconfig1-dev \
-            libgl-dev \
+            libgl1-mesa-dev \
+            libglu1-mesa-dev \
+            mesa-common-dev \
             libx11-dev \
-            libxrandr-dev \
+            libxcomposite-dev \
             libxcursor-dev \
-            libxinerama-dev
+            libxext-dev \
+            libxinerama-dev \
+            libxrandr-dev \
+            libxrender-dev \
+            libxi-dev
 
       - name: Configure CMake
         run: |
