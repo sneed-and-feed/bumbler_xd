@@ -13,7 +13,7 @@ if(APPLE)
     endif()
 endif()
 
-project(BUMBLER_XD_PROJECT VERSION 1.0.3 LANGUAGES C CXX)
+project(BUMBLER_XD_PROJECT VERSION 1.0.4 LANGUAGES C CXX)
 
 # Enforce ISO C++20 standard without compiler extensions
 set(CMAKE_CXX_STANDARD 20)
@@ -147,7 +147,7 @@ endif()
 juce_add_plugin(BumblerXD
     COMPANY_NAME "Sneed's Feed & Seed Ltd."
     BUNDLE_ID "com.sneedandfeed.bumbler_xd"
-    VERSION "1.0.3"
+    VERSION "1.0.4"
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE

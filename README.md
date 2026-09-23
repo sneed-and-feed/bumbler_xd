@@ -468,8 +468,8 @@ python scripts/package_release.py
 ```
 
 Generated release artifacts in `releases/`:
-- `releases/BUMBLER_XD-v1.0.3-Windows-x64.zip` (Full package: Standalone + VST3 + Documentation)
-- `releases/BUMBLER_XD-v1.0.3-VST3-Windows-x64.zip` (VST3-only plugin package)
+- `releases/BUMBLER_XD-v1.0.4-Windows-x64.zip` (Full package: Standalone + VST3 + Documentation)
+- `releases/BUMBLER_XD-v1.0.4-VST3-Windows-x64.zip` (VST3-only plugin package)
 - `releases/SHA256SUMS.txt` (GNU `sha256sum`-compatible cryptographic manifest)
 
 ---
