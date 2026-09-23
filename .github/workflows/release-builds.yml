@@ -1,0 +1,126 @@
+name: Build & Attach Release Binaries (macOS & Linux)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    name: Build macOS Universal (VST3, AU, Standalone)
+    runs-on: macos-14
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DBUMBLER_BUILD_TESTS=OFF
+
+      - name: Build Release Targets
+        run: cmake --build build --config Release -j$(sysctl -n hw.ncpu)
+
+      - name: Package macOS Universal Zip
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ -z "$VERSION" ] && VERSION="1.0.0"
+          mkdir -p package/VST3 package/AU package/Standalone
+
+          find build -type d -name "Bumbler XD.vst3" -exec cp -R {} package/VST3/ \;
+          find build -type d -name "Bumbler XD.component" -exec cp -R {} package/AU/ \;
+          find build -type d -name "Bumbler XD.app" -exec cp -R {} package/Standalone/ \;
+
+          [ -f LICENSE ] && cp LICENSE package/
+          [ -f README.md ] && cp README.md package/
+
+          ZIP_NAME="BUMBLER_XD-v${VERSION}-macOS-Universal.zip"
+          cd package && zip -r "../${ZIP_NAME}" * && cd ..
+          echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+          echo "TAG_NAME=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${TAG_NAME}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Uploading ${ZIP_NAME} to release ${TAG_NAME}..."
+            gh release upload "${TAG_NAME}" "${ZIP_NAME}" --repo "${{ github.repository }}" --clobber
+          else
+            echo "Release ${TAG_NAME} not found yet. Preserving as artifact."
+          fi
+
+      - name: Upload Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}
+
+  build-linux:
+    name: Build Linux x64 (VST3, Standalone)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libfreetype-dev \
+            libfontconfig1-dev \
+            libgl-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxcursor-dev \
+            libxinerama-dev
+
+      - name: Configure CMake
+        run: |
+          cmake -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUMBLER_BUILD_TESTS=OFF
+
+      - name: Build Release Targets
+        run: cmake --build build --config Release -j$(nproc)
+
+      - name: Package Linux x64 Zip
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ -z "$VERSION" ] && VERSION="1.0.0"
+          mkdir -p package/VST3 package/Standalone
+
+          find build -type d -name "Bumbler XD.vst3" -exec cp -R {} package/VST3/ \;
+          find build -type f -name "Bumbler XD" -exec cp {} package/Standalone/ \;
+
+          [ -f LICENSE ] && cp LICENSE package/
+          [ -f README.md ] && cp README.md package/
+
+          ZIP_NAME="BUMBLER_XD-v${VERSION}-Linux-x64.zip"
+          cd package && zip -r "../${ZIP_NAME}" * && cd ..
+          echo "ZIP_NAME=${ZIP_NAME}" >> $GITHUB_ENV
+          echo "TAG_NAME=${GITHUB_REF_NAME}" >> $GITHUB_ENV
+
+      - name: Upload to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${TAG_NAME}" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Uploading ${ZIP_NAME} to release ${TAG_NAME}..."
+            gh release upload "${TAG_NAME}" "${ZIP_NAME}" --repo "${{ github.repository }}" --clobber
+          else
+            echo "Release ${TAG_NAME} not found yet. Preserving as artifact."
+          fi
+
+      - name: Upload Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}

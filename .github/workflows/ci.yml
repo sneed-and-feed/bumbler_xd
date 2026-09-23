@@ -1,0 +1,63 @@
+name: CI Matrix (Windows, macOS, Linux)
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows (MSVC x64)
+            os: windows-latest
+            cmake_args: ""
+            build_args: "--config Release"
+            ctest_args: "-C Release"
+
+          - name: macOS Universal (ARM64 + x86_64)
+            os: macos-14
+            cmake_args: "-DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"
+            build_args: "--config Release"
+            ctest_args: "-C Release"
+
+          - name: Ubuntu Linux (GCC x64)
+            os: ubuntu-latest
+            cmake_args: "-DCMAKE_BUILD_TYPE=Release"
+            build_args: "--config Release"
+            ctest_args: "-C Release"
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux Audio Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libasound2-dev \
+            libfreetype-dev \
+            libfontconfig1-dev \
+            libgl-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxcursor-dev \
+            libxinerama-dev
+
+      - name: Configure CMake
+        run: >
+          cmake -B build
+          ${{ matrix.cmake_args }}
+
+      - name: Build All Targets (Plugin + Tests)
+        run: cmake --build build ${{ matrix.build_args }} --parallel
+
+      - name: Run CTest Verification Suite (21 Suites)
+        run: ctest --test-dir build ${{ matrix.ctest_args }} --output-on-failure
