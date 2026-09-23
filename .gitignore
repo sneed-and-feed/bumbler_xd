@@ -10,5 +10,7 @@ bin/
 *.tlog
 *.idb
 out/
+releases/
+*.zip
 .DS_Store
 Thumbs.db
