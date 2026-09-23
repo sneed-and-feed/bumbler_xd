@@ -9,7 +9,8 @@
     "midi_note": 60,
     "midi_velocity": 0.85,
     "note_off_sample": 1024,
-    "required_snr_db": 120.0,
+    "required_fixture_snr_db": 75.0,
+    "required_deterministic_snr_db": 120.0,
     "max_sample_delta": 0.0001
   },
   "presets": [

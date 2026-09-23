@@ -22,7 +22,7 @@ function(bumbler_add_test_target TARGET_NAME SOURCE_FILE TEST_NAME)
             target_compile_options(${TARGET_NAME} PRIVATE /arch:AVX2)
         endif()
     else()
-        target_compile_options(${TARGET_NAME} PRIVATE -Wall -Wextra -O3)
+        target_compile_options(${TARGET_NAME} PRIVATE -Wall -Wextra -O3 -ffp-contract=off)
     endif()
 
     if(TARGET bumbler_dsp_core)

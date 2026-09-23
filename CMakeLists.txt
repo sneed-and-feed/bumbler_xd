@@ -42,7 +42,9 @@ if(MSVC)
     endif()
 else()
     # Clang / GCC
-    add_compile_options(-Wall -Wextra -O3)
+    # -ffp-contract=off prevents FMA contraction across expressions to match MSVC /fp:precise
+    # and preserve strict IEEE-754 semantics across architectures.
+    add_compile_options(-Wall -Wextra -O3 -ffp-contract=off)
     # Note: -ffast-math is omitted to maintain strict IEEE-754 semantics
     # and preserve NaN/Inf assertions in audio DSP tests.
 endif()

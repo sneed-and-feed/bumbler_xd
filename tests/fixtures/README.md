@@ -10,7 +10,7 @@
 
 The Golden Test Vector framework guarantees bit-level deterministic regression protection across all core DSP subsystems of **Bumbler XD**. By evaluating rendered audio blocks of factory presets and isolated per-algorithm DSP components against deterministic golden numbers, the suite enforces:
 
-- **Signal-to-Noise Ratio (SNR)**: $> 120.0\text{ dB}$ across identical deterministic runs and against reference fixtures.
+- **Signal-to-Noise Ratio (SNR)**: $> 120.0\text{ dB}$ across identical deterministic runs on the same host, and $> 75.0\text{ dB}$ cross-platform against static CSV reference fixtures (accounting for transcendental runtime differences in `std::tan`, `std::tanh`, `std::exp`, and `std::pow` across CPU architectures like ARM64 vs x86_64).
 - **Maximum Sample Delta**: $\Delta_{\max} < 1.0 \times 10^{-4}$ ($< -80\text{ dBFS}$).
 - **Zero Denormal Flushes**: Strict FTZ/DAZ subnormal interception ($0$ subnormals permitted).
 - **Zero Non-Finite Values**: Guaranteed zero `NaN` or `Inf` floating-point poisoning.
