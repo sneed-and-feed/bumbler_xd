@@ -9,6 +9,54 @@
 
 namespace bumbler {
 
+/**
+ * BumblerVoiceManager: Manages polyphonic voice allocation, note lifecycle,
+ * and audio accumulation for up to kMaxVoices (16) synthesizer voices.
+ *
+ * ============================================================================
+ * Threading Model & Audio Thread Safety Guarantees:
+ * ============================================================================
+ * - BumblerVoiceManager is designed exclusively for synchronous, single-thread
+ *   execution on the real-time audio thread.
+ * - All methods (prepare, reset, noteOn, noteOff, setSustainPedal, setPitchBend,
+ *   allNotesOff, setPolyphonyLimit, renderBlock) are strictly non-blocking,
+ *   wait-free, and guaranteed to perform zero dynamic memory allocations.
+ * - No mutexes, spinning primitives, condition variables, or operating system
+ *   synchronization objects are acquired.
+ * - Multi-threaded hosts must ensure sequential calling of MIDI dispatches and
+ *   block rendering, or dispatch MIDI through lock-free SPSC queues.
+ *
+ * ============================================================================
+ * Voice Allocation Invariants:
+ * ============================================================================
+ * Voice allocation employs a strict, deterministic 4-tier strategy:
+ *
+ * 1. Tier 1 (Same-Pitch Retriggering):
+ *    If an active voice is already sounding the requested MIDI pitch, that voice
+ *    is retriggered in-place. This preserves phase continuity, prevents duplicate
+ *    voice buildup on rapid repeated notes, and conserves voice polyphony headroom.
+ *
+ * 2. Tier 2 (Free / Inactive Voice Acquisition):
+ *    If the requested pitch is not currently active, the manager performs a round-robin
+ *    scan starting from (mLastAllocatedIndex + 1) across the active polyphony pool
+ *    [0, mMaxPolyphony - 1]. The first inactive voice encountered is allocated.
+ *
+ * 3. Tier 3 (Oldest Releasing Voice Stealing):
+ *    If all voices in the active polyphony pool are active, the manager searches
+ *    for voices currently in their Release envelope stage (isReleasing() == true).
+ *    Among these, the voice with the lowest trigger sample timestamp is stolen.
+ *
+ * 4. Tier 4 (Oldest Held Voice Stealing / LRU Fallback):
+ *    If all active voices are actively held (sustaining), the voice with the oldest
+ *    trigger sample timestamp across the active polyphony pool is stolen.
+ *
+ * Invariant Constraints:
+ * - Active voices are bounded strictly by mMaxPolyphony, clamped to [1, kMaxVoices].
+ * - When polyphony limit is lowered, any active voices outside the new limit are
+ *   instantly silenced via forceKill().
+ * - Scratch buffer usage for mono downmixing is guarded and chunked to prevent
+ *   buffer overruns regardless of host render block sizes.
+ */
 class BumblerVoiceManager {
 public:
     static constexpr int kMaxVoices = 16;

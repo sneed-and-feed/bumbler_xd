@@ -266,3 +266,7 @@ target_link_libraries(bumbler_challenger_m6_2_tests PRIVATE
 )
 add_test(NAME ChallengerM62AdversarialStatePresetsGui COMMAND bumbler_challenger_m6_2_tests)
 
+# 22. Golden Vector Tests & Regression Suite (Deterministic Invariants & Preset Vectors)
+bumbler_add_test_target(bumbler_golden_vector_tests golden_vector_tests.cpp GoldenVectorTests)
+target_include_directories(bumbler_golden_vector_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../source/plugin)
+

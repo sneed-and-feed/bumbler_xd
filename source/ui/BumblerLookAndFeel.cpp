@@ -37,6 +37,8 @@ void BumblerLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int w
 
     const float size = juce::jmin(bounds.getWidth(), bounds.getHeight());
     const float radius = (size - 6.0f) * 0.5f;
+    if (radius <= 2.0f) return;
+
     const float centreX = bounds.getCentreX();
     const float centreY = bounds.getCentreY();
     const float angle = rotaryStartAngle + sliderPosProportional * (rotaryEndAngle - rotaryStartAngle);
@@ -58,6 +60,8 @@ void BumblerLookAndFeel::drawRotarySlider(juce::Graphics& g, int x, int y, int w
 
     // 3. Knob body outer shadow and knurled perimeter
     const float capRadius = radius - trackWidth - 2.5f;
+    if (capRadius <= 1.0f) return;
+
     const float capRx = centreX - capRadius;
     const float capRy = centreY - capRadius;
     const float capRw = capRadius * 2.0f;
@@ -106,6 +110,7 @@ void BumblerLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int w
 
     auto trackArea = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
                                             static_cast<float>(width), static_cast<float>(height)).reduced(4.0f, 8.0f);
+    if (trackArea.getWidth() <= 4.0f || trackArea.getHeight() <= 4.0f) return;
 
     // Trough recessed slot
     const float slotHeight = 6.0f;
@@ -127,8 +132,9 @@ void BumblerLookAndFeel::drawLinearSlider(juce::Graphics& g, int x, int y, int w
     // Thumb fader cap (brushed aluminum block with center indicator)
     const float thumbWidth = 24.0f;
     const float thumbHeight = trackArea.getHeight() + 4.0f;
-    const float thumbX = juce::jlimit(trackArea.getX(), trackArea.getRight() - thumbWidth,
-                                      sliderPos - thumbWidth * 0.5f);
+    const float minX = trackArea.getX();
+    const float maxX = std::max(minX, trackArea.getRight() - thumbWidth);
+    const float thumbX = juce::jlimit(minX, maxX, sliderPos - thumbWidth * 0.5f);
     const float thumbY = trackArea.getCentreY() - thumbHeight * 0.5f;
 
     auto thumbArea = juce::Rectangle<float>(thumbX, thumbY, thumbWidth, thumbHeight);
@@ -284,8 +290,12 @@ void BumblerLookAndFeel::drawLabel(juce::Graphics& g, juce::Label& label) {
 
         g.setColour(label.findColour(juce::Label::textColourId).withMultipliedAlpha(alpha));
         auto textArea = label.getBorderSize().subtractedFrom(label.getLocalBounds());
+        const float fontH = font.getHeight();
+        const int maxLines = (fontH > 0.0f)
+            ? juce::jmax(1, static_cast<int>(static_cast<float>(textArea.getHeight()) / fontH))
+            : 1;
         g.drawFittedText(label.getText(), textArea, label.getJustificationType(),
-                         juce::jmax(1, static_cast<int>(static_cast<float>(textArea.getHeight()) / font.getHeight())),
+                         maxLines,
                          label.getMinimumHorizontalScale());
     }
 }

@@ -13,7 +13,7 @@ if(APPLE)
     endif()
 endif()
 
-project(BUMBLER_XD_PROJECT VERSION 1.0.0 LANGUAGES C CXX)
+project(BUMBLER_XD_PROJECT VERSION 1.0.2 LANGUAGES C CXX)
 
 # Enforce ISO C++20 standard without compiler extensions
 set(CMAKE_CXX_STANDARD 20)
@@ -147,7 +147,7 @@ endif()
 juce_add_plugin(BumblerXD
     COMPANY_NAME "Sneed's Feed & Seed Ltd."
     BUNDLE_ID "com.sneedandfeed.bumbler_xd"
-    VERSION "1.0.0"
+    VERSION "1.0.2"
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
@@ -163,6 +163,13 @@ juce_add_plugin(BumblerXD
 # Plugin processor and editor sources
 target_sources(BumblerXD PRIVATE
     source/plugin/Parameters.h
+    source/plugin/parameters/ParameterHelpers.h
+    source/plugin/parameters/OscillatorParameters.h
+    source/plugin/parameters/FilterParameters.h
+    source/plugin/parameters/EnvelopeParameters.h
+    source/plugin/parameters/LfoParameters.h
+    source/plugin/parameters/CharacterParameters.h
+    source/plugin/parameters/PresetParameters.h
     source/plugin/PluginProcessor.h
     source/plugin/PluginProcessor.cpp
     source/plugin/PluginEditor.h
@@ -205,7 +212,23 @@ target_link_libraries(BumblerXD PRIVATE
 )
 
 # ==============================================================================
-# 3. Headless Verification Tests & CTest Integration
+# 3. Headless CLI Example
+# ==============================================================================
+add_executable(bumbler_headless_example examples/headless_synth.cpp)
+target_include_directories(bumbler_headless_example PRIVATE source source/dsp source/plugin)
+target_link_libraries(bumbler_headless_example PRIVATE bumbler_dsp_core)
+if(MSVC)
+    target_compile_definitions(bumbler_headless_example PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(bumbler_headless_example PRIVATE /utf-8 /W4 /O2 /fp:precise)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8 OR CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64|x86_64|x64")
+        target_compile_options(bumbler_headless_example PRIVATE /arch:AVX2)
+    endif()
+else()
+    target_compile_options(bumbler_headless_example PRIVATE -Wall -Wextra -O3)
+endif()
+
+# ==============================================================================
+# 4. Headless Verification Tests & CTest Integration
 # ==============================================================================
 option(BUMBLER_BUILD_TESTS "Build Bumbler XD test executables" ON)
 
@@ -213,3 +236,4 @@ if(BUMBLER_BUILD_TESTS)
     enable_testing()
     add_subdirectory(tests)
 endif()
+

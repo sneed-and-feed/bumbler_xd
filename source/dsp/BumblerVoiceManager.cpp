@@ -1,10 +1,16 @@
 #include "BumblerVoiceManager.h"
+#include <cmath>
+#include <algorithm>
 
 namespace bumbler {
 
 void BumblerVoiceManager::prepare(double sampleRate, int maxBlockSize) noexcept {
-    mSampleRate = (sampleRate > 1000.0) ? sampleRate : 48000.0;
-    mMaxBlockSize = (maxBlockSize > 0) ? maxBlockSize : 512;
+    // Defensively validate sampleRate against non-finite, sub-audio, or ultrasonic values
+    mSampleRate = (!std::isfinite(sampleRate) || sampleRate <= 1000.0 || sampleRate > 384000.0)
+                      ? 48000.0
+                      : sampleRate;
+    // Defensively clamp maxBlockSize to valid range [1, 8192]
+    mMaxBlockSize = std::clamp(maxBlockSize, 1, 8192);
     mSampleCounter = 0;
     mNoteTriggerCounter = 0;
     mLastAllocatedIndex = 0;
@@ -179,6 +185,7 @@ void BumblerVoiceManager::allNotesOff(bool fastKill) noexcept {
 void BumblerVoiceManager::renderBlock(float* const* outputChannels, int numChannels, int numSamples, const ParameterSnapshot& params) noexcept {
     ScopedNoDenormals noDenormals;
 
+    // Defensive checks against null channel arrays, non-positive channel count, and invalid sample counts
     if (outputChannels == nullptr || numChannels < 1 || numSamples <= 0) return;
 
     mAnalogMode = (params.analogMode >= 0.5f);
@@ -188,31 +195,46 @@ void BumblerVoiceManager::renderBlock(float* const* outputChannels, int numChann
 
     if (numChannels == 1) {
         float* outM = outputChannels[0];
+        if (outM == nullptr) return;
+
         std::memset(outM, 0, static_cast<size_t>(numSamples) * sizeof(float));
 
+        // If numSamples > mMonoScratchBuffer.size() (8192), process in safe chunked
+        // iterations of at most mMonoScratchBuffer.size() samples to avoid buffer overrun.
+        const int kScratchCapacity = static_cast<int>(mMonoScratchBuffer.size());
         float* scratchR = mMonoScratchBuffer.data();
-        const int safeSamples = std::min(numSamples, static_cast<int>(mMonoScratchBuffer.size()));
-        std::memset(scratchR, 0, static_cast<size_t>(safeSamples) * sizeof(float));
 
-        for (int i = 0; i < mMaxPolyphony; ++i) {
-            auto& v = mVoices[static_cast<size_t>(i)];
-            if (v.isActive()) {
-                v.renderBlockAccumulate(outM, scratchR, safeSamples, params);
+        int samplesProcessed = 0;
+        while (samplesProcessed < numSamples) {
+            const int chunkSize = std::min(numSamples - samplesProcessed, kScratchCapacity);
+            float* chunkOutM = outM + samplesProcessed;
+
+            std::memset(scratchR, 0, static_cast<size_t>(chunkSize) * sizeof(float));
+
+            for (int i = 0; i < mMaxPolyphony; ++i) {
+                auto& v = mVoices[static_cast<size_t>(i)];
+                if (v.isActive()) {
+                    v.renderBlockAccumulate(chunkOutM, scratchR, chunkSize, params);
+                }
             }
-        }
 
-        mCharacterCircuits.processStereo(outM, scratchR, safeSamples, params);
+            mCharacterCircuits.processStereo(chunkOutM, scratchR, chunkSize, params);
 
-        for (int s = 0; s < safeSamples; ++s) {
-            outM[s] = flushDenormal(0.5f * (outM[s] + scratchR[s]));
+            for (int s = 0; s < chunkSize; ++s) {
+                chunkOutM[s] = flushDenormal(0.5f * (chunkOutM[s] + scratchR[s]));
+            }
+
+            samplesProcessed += chunkSize;
         }
 
         mSampleCounter += static_cast<uint64_t>(numSamples);
         return;
     }
 
+    // Stereo rendering: defensively guard against null channel pointers
     float* outL = outputChannels[0];
     float* outR = outputChannels[1];
+    if (outL == nullptr || outR == nullptr) return;
 
     std::memset(outL, 0, static_cast<size_t>(numSamples) * sizeof(float));
     std::memset(outR, 0, static_cast<size_t>(numSamples) * sizeof(float));

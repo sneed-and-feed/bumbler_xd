@@ -50,6 +50,24 @@ void BumblerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         } else if (msg.isAllNotesOff() || msg.isAllSoundOff()) {
             mEngine.processMidiEvent(0xB0, 123, 0.0f);
         } else if (msg.isPitchWheel()) {
+            // ================================================================
+            // 14-Bit MIDI Pitch Wheel Transformation:
+            // Standard MIDI Pitch Bend encodes pitch deflection using two 7-bit
+            // data bytes (LSB and MSB) combined into a 14-bit unsigned integer:
+            //   - Domain: [0, 16383] (0x0000 to 0x3FFF)
+            //   - Center: 8192 (0x2000, neutral position, no pitch bend)
+            //
+            // Mathematical Normalization Formula:
+            //   normalized = static_cast<float>(pitchWheelValue - 8192) / 8192.0f
+            // Maps the 14-bit domain [0, 16383] to bipolar float [-1.0f, +1.0f]:
+            //   - Value 0     -> (0 - 8192) / 8192.0f = -1.0f (full pitch down)
+            //   - Value 8192  -> (8192 - 8192) / 8192.0f =  0.0f (center / neutral)
+            //   - Value 16383 -> (16383 - 8192) / 8192.0f ≈ +0.99988f (~+1.0f full up)
+            //
+            // Downstream Scaling (BumblerEngine::processMidiEvent):
+            //   pitchBendSemitones = normalized * 2.0f
+            // Maps [-1.0f, +1.0f] to standard +/-2.0 semitones pitch bend range.
+            // ================================================================
             const float pitchBendVal = static_cast<float>(msg.getPitchWheelValue() - 8192) / 8192.0f;
             mEngine.processMidiEvent(0xE0, 0, pitchBendVal);
         } else if (msg.isController()) {
