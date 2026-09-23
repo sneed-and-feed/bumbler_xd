@@ -1,0 +1,14 @@
+build/
+.agents/
+.vs/
+bin/
+*.obj
+*.exe
+*.vst3
+*.pdb
+*.ilk
+*.tlog
+*.idb
+out/
+.DS_Store
+Thumbs.db
