@@ -31,10 +31,33 @@ Bumbler XD maintains strict API and DAW state recall stability commitments acros
 | **v1.0.2** | v1.0.2 (Reference Docs, Golden Vectors, CLI) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
 | **v1.0.3** | v1.0.3 (Per-Algorithm Fixtures, Minimal Example, Voice Stealing Proof) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
 | **v1.0.4** | v1.0.4 (Context Menus, Dynamic Filter LCD Telemetry, Release Calibration) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
+| **v1.0.5** | v1.0.5 (Legacy Preset Importer, 15 Homage Presets, Docs Refactor) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
 
 ---
 
 ## Release History
+
+## [1.0.5] - 2026-09-23
+
+### Added
+- **Legacy Wasp XT Preset Migration Importer (`scripts/import_wasp_presets.py`):**
+  - Universal parser for `.fst` (FL Studio State), `.fxp` / `.fxb` (VST 2.4 chunks), and `.flp` (FL Studio project files event 0xC5 scanner).
+  - Complete 55-parameter blueprint mapping to modern APVTS parameters with logarithmic cutoff scaling and exponential ADSR conversion.
+  - Exports to both JUCE APVTS `.xml` user presets and C++ `PresetDefinition` blocks.
+- **15 Clean-Room Homage Presets (`presets/homage/`):**
+  - 15 royalty-free, professionally tuned presets across Bass, Lead, Pad, Pluck, Percussion, and FX.
+  - Accompanied by `presets/homage/README.md` and `docs/PRESETS.md`.
+- **Legal Interoperability & Architecture Documentation (`docs/PRESET_MIGRATION.md`):**
+  - Detailed technical specification of legacy binary formats and clean-room legal interoperability framework.
+- **Automated Importer Unit Tests (`tests/test_preset_importer.py`):**
+  - 13 automated unit tests verifying extraction, scaling, XML parsing, and C++ code generation (100% pass).
+
+### Changed
+- **Modular Documentation & README Refactoring:**
+  - Refactored `README.md` into a concise, high-level overview, relocating deep preset and migration specifications to `docs/PRESETS.md` and `docs/PRESET_MIGRATION.md`.
+  - Updated `PluginProcessor.cpp` to seamlessly accept `<BumblerXD>` XML root tag alongside `<Parameters>`.
+
+---
 
 ## [1.0.4] - 2026-09-23
 

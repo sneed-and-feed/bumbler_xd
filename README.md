@@ -24,6 +24,8 @@
 
 - [**DSP Algorithms & Mathematical Architecture**](docs/DSP_ALGORITHMS.md): Comprehensive mathematical foundations, Mermaid signal flow block diagrams, 4th-order PolyBLEP piecewise polynomial derivations, Zero-Delay Feedback (ZDF) SVF bilinear integration, modeled CMOS 4069UB inverter saturation, Jacobi-Anger Bessel FM expansions, and vintage character circuits.
 - [**C++20 Core API Reference & Integration Guide**](docs/API.md): Complete public C++20 API documentation for `bumbler_dsp_core` (`BumblerEngine`, `BumblerVoiceManager`, `ParameterSnapshot`, `CharacterCircuits`), real-time safety contracts, lock-free parameter snapshot passing, and host integration patterns (DAWs, Unreal Engine 5, Unity, and embedded Linux).
+- [**Preset Architecture & Sound Library**](docs/PRESETS.md): Complete preset design guide covering the 5 embedded factory presets, 15 clean-room homage presets, and DAW installation.
+- [**Legacy Preset Migration & Interoperability**](docs/PRESET_MIGRATION.md): Technical guide for migrating legacy `.fxp`, `.fxb`, `.fst`, and `.flp` patches with complete 55-parameter mapping specifications and legal clean-room interoperability.
 - [**Changelog & Version Compatibility Matrix**](CHANGELOG.md): Comprehensive release history adhering to Keep a Changelog and SemVer 2.0, API and APVTS parameter ID stability commitments, and platform compatibility matrix.
 
 ---
@@ -69,12 +71,18 @@ Modeled using Zero-Delay Feedback (ZDF) State-Variable Filters with trapezoidal 
 ### 🖥️ APVTS & Skeuomorphic UI
 - **55 Automated Parameters:** JUCE `AudioProcessorValueTreeState` (APVTS) with lock-free atomic parameter snapshot polling ($<45\text{ ns}$ latency, 0 audio thread allocations).
 - **Vintage Control Panel:** Industrial slate-blue chassis, vintage brushed-metal pointer knobs, LED buttons, horizontal mix fader, and dual green LCD ADSR displays.
-- **Factory Presets:**
-  1. *Wasp Classic Lead*
-  2. *Fat Square Bass*
-  3. *Acid Reso Sweep*
-  4. *Haas Stereo Pluck*
-  5. *Cosmic FM Drone*
+
+---
+
+## 🎹 Presets & Sound Library
+
+Bumbler XD provides a complete sound library and migration ecosystem:
+
+- **Factory Programs (5 Embedded Sounds)**: Hardcoded directly into the DSP firmware for zero-latency instant recall: `Acid Bass`, `Sync Lead`, `Swarm Pad`, `Percussion`, and `Vintage Drone`.
+- **Clean-Room Homage Collection (15 Presets)**: Royalty-free XML preset library in [`presets/homage/`](presets/homage/) covering Bass, Lead, Pad, Pluck, Percussion, and FX.
+- **Legacy Migration Tool**: Utility ([`scripts/import_wasp_presets.py`](scripts/import_wasp_presets.py)) for converting legacy `.fxp`, `.fxb`, `.fst`, and `.flp` patches into modern APVTS XML presets.
+
+For complete preset listings, acoustic design notes, and DAW loading instructions, see [**docs/PRESETS.md**](docs/PRESETS.md). For legacy format specifications and migration workflows, see [**docs/PRESET_MIGRATION.md**](docs/PRESET_MIGRATION.md).
 
 ---
 
@@ -468,8 +476,8 @@ python scripts/package_release.py
 ```
 
 Generated release artifacts in `releases/`:
-- `releases/BUMBLER_XD-v1.0.4-Windows-x64.zip` (Full package: Standalone + VST3 + Documentation)
-- `releases/BUMBLER_XD-v1.0.4-VST3-Windows-x64.zip` (VST3-only plugin package)
+- `releases/BUMBLER_XD-v1.0.5-Windows-x64.zip` (Full package: Standalone + VST3 + Documentation)
+- `releases/BUMBLER_XD-v1.0.5-VST3-Windows-x64.zip` (VST3-only plugin package)
 - `releases/SHA256SUMS.txt` (GNU `sha256sum`-compatible cryptographic manifest)
 
 ---

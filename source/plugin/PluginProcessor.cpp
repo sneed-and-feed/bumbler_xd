@@ -227,8 +227,11 @@ void BumblerAudioProcessor::setStateInformation(const void* data, int sizeInByte
         xmlState = juce::XmlDocument::parse(xmlString);
     }
 
-    if (xmlState == nullptr || !xmlState->hasTagName(mApvts.state.getType()))
+    if (xmlState == nullptr || (!xmlState->hasTagName(mApvts.state.getType()) && !xmlState->hasTagName("BumblerXD")))
         return;
+
+    if (xmlState->hasTagName("BumblerXD"))
+        xmlState->setTagName(mApvts.state.getType());
 
     auto vt = juce::ValueTree::fromXml(*xmlState);
     if (!vt.isValid())
