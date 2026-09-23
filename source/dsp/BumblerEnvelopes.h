@@ -81,7 +81,7 @@ public:
 
         mSustainLevel = std::clamp(sLevel, 0.0f, 1.0f);
 
-        const float rel = std::clamp(rSec, 0.001f, 10.0f);
+        const float rel = std::clamp(rSec, 0.002f, 10.0f);
         if (std::abs(rel - mCachedRelease) > 1.0e-5f) {
             mCachedRelease = rel;
             mReleaseCoeff = std::exp(-1.0f / (rel * static_cast<float>(mSampleRate) * 0.5f));

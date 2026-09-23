@@ -54,6 +54,17 @@ Bumbler XD maintains strict API and DAW state recall stability commitments acros
 - **Known Limitations & Architectural Boundaries:**
   - Added dedicated architectural boundaries section in `docs/API.md` and `README.md` documenting fixed 16-voice ceiling, channel-global pitch bend/CC, filter cutoff clamping, block-rate automation, and single stereo bus topology.
 
+### Fixed
+- **Knob & Fader Right-Click Context Menus (`source/plugin/PluginEditor.cpp`):**
+  - Implemented responsive right-click popup menus across all knobs and the master OSC Mix fader.
+  - Added actions for *Reset to Default* (with exact formatted default readout), *Set to Minimum*, *Set to Maximum*, and *Set to Exact Value...* with modal text input, plus DAW host automation menu integration (`getHostContext()->getContextMenuForParameter`).
+- **Filter Envelope Startup & Live LCD Telemetry (`source/plugin/PluginProcessor.cpp`, `source/ui/LCDGraphDisplay.cpp`):**
+  - Fixed startup parameter discrepancy by calling `loadPreset(0)` ("Acid Bass") upon plugin initialization, ensuring filter envelope modulation is active at $+75\%$ out-of-the-box instead of defaulting to $0\%$.
+  - Upgraded Filter LCD display with real-time modulation telemetry: dynamically indicates active depth `[AMT: %+.0f%%]`, displays warning tag `[AMT: 0% — INACTIVE]` when envelope depth is zero, and reflects `[LINKED TO AMP]` when envelope linking is enabled.
+- **Envelope Release Skew & De-Click Calibration (`source/plugin/parameters/EnvelopeParameters.h`, `source/dsp/BumblerEnvelopes.h`):**
+  - Re-centered the exponential skew midpoint of Amp and Filter Release from `0.5s` to `1.2s` (and Decay to `1.0s`), eliminating the abrupt drop-off cliff where 70% of knob travel was compressed under 55ms.
+  - Implemented a musical $2\text{ms}$ minimum floor (`0.002f`) in `BumblerADSR::setParameters()` to prevent sub-cycle waveform cutoff clicks at near-zero release settings.
+
 ---
 
 ## [1.0.2] - 2026-09-23

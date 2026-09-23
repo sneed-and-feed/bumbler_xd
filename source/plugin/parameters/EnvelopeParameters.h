@@ -92,14 +92,14 @@ struct EnvelopeAtomicPointers {
 // ============================================================================
 inline void addEnvelopeParameters(std::vector<std::unique_ptr<juce::RangedAudioParameter>>& params) {
     detail::addFloatSkewParameter(params, ParamIDs::ampAttack,  "Amp Attack", 0.001f, 10.0f, 0.01f, 0.5f, 0.001f, "s");
-    detail::addFloatSkewParameter(params, ParamIDs::ampDecay,   "Amp Decay", 0.001f, 10.0f, 0.30f, 0.5f, 0.001f, "s");
+    detail::addFloatSkewParameter(params, ParamIDs::ampDecay,   "Amp Decay", 0.001f, 10.0f, 0.30f, 1.0f, 0.001f, "s");
     detail::addFloatParameter(params,     ParamIDs::ampSustain, "Amp Sustain", 0.0f, 1.0f, 0.80f, 0.001f, "%");
-    detail::addFloatSkewParameter(params, ParamIDs::ampRelease, "Amp Release", 0.001f, 10.0f, 0.30f, 0.5f, 0.001f, "s");
+    detail::addFloatSkewParameter(params, ParamIDs::ampRelease, "Amp Release", 0.001f, 10.0f, 0.30f, 1.2f, 0.001f, "s");
 
     detail::addFloatSkewParameter(params, ParamIDs::filterAttack,  "Filter Attack", 0.001f, 10.0f, 0.05f, 0.5f, 0.001f, "s");
-    detail::addFloatSkewParameter(params, ParamIDs::filterDecay,   "Filter Decay", 0.001f, 10.0f, 0.50f, 0.5f, 0.001f, "s");
+    detail::addFloatSkewParameter(params, ParamIDs::filterDecay,   "Filter Decay", 0.001f, 10.0f, 0.50f, 1.0f, 0.001f, "s");
     detail::addFloatParameter(params,     ParamIDs::filterSustain, "Filter Sustain", 0.0f, 1.0f, 0.50f, 0.001f, "%");
-    detail::addFloatSkewParameter(params, ParamIDs::filterRelease, "Filter Release", 0.001f, 10.0f, 0.40f, 0.5f, 0.001f, "s");
+    detail::addFloatSkewParameter(params, ParamIDs::filterRelease, "Filter Release", 0.001f, 10.0f, 0.40f, 1.2f, 0.001f, "s");
     detail::addBoolParameter(params,      ParamIDs::envLink,       "Envelope Link", false);
 
     detail::addFloatSkewParameter(params, ParamIDs::modAttack, "Mod Attack", 0.001f, 5.0f, 0.05f, 0.5f, 0.001f, "s");

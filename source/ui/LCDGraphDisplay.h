@@ -15,6 +15,7 @@ public:
     ~LCDGraphDisplay() override = default;
 
     void setEnvelopeParameters(float attackSec, float decaySec, float sustainLevel, float releaseSec);
+    void setFilterModulationStatus(float envAmount, bool isLinked);
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -27,6 +28,9 @@ private:
     float mDecay   { 0.50f };
     float mSustain { 0.50f };
     float mRelease { 0.40f };
+
+    float mEnvAmount { 1.0f };
+    bool  mIsLinked  { false };
 
     juce::Path mCurvePath;
     juce::Path mFillPath;

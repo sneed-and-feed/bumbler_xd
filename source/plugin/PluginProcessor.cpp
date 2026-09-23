@@ -10,6 +10,7 @@ BumblerAudioProcessor::BumblerAudioProcessor()
     // Cache all 55 atomic parameter value pointers once during construction.
     // Audio thread reads directly from these pointers with std::memory_order_relaxed.
     mAtomicPointers.initialize(mApvts);
+    loadPreset(0);
 }
 
 void BumblerAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock) {

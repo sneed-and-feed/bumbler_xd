@@ -19,6 +19,12 @@ void LCDGraphDisplay::setEnvelopeParameters(float attackSec, float decaySec, flo
     repaint();
 }
 
+void LCDGraphDisplay::setFilterModulationStatus(float envAmount, bool isLinked) {
+    mEnvAmount = envAmount;
+    mIsLinked = isLinked;
+    repaint();
+}
+
 void LCDGraphDisplay::resized() {
     buildEnvelopePath(getLocalBounds().toFloat());
 }
@@ -127,9 +133,18 @@ void LCDGraphDisplay::paint(juce::Graphics& g) {
     // 6. Header Alphanumeric Tag
     g.setColour(juce::Colour(BumblerColours::LcdText));
     g.setFont(juce::FontOptions(10.0f, juce::Font::bold));
-    const juce::String headerStr = (mType == DisplayType::FilterEnvelope)
-        ? "FILTER ENVELOPE [24dB MOD]"
-        : "AMPLIFIER ENVELOPE [VCA]";
+    juce::String headerStr;
+    if (mType == DisplayType::FilterEnvelope) {
+        if (mIsLinked) {
+            headerStr = "FILTER ENVELOPE [LINKED TO AMP]";
+        } else if (std::abs(mEnvAmount) < 0.01f) {
+            headerStr = "FILTER ENVELOPE [AMT: 0% — INACTIVE]";
+        } else {
+            headerStr = juce::String::formatted("FILTER ENVELOPE [AMT: %+.0f%%]", static_cast<double>(mEnvAmount * 100.0f));
+        }
+    } else {
+        headerStr = "AMPLIFIER ENVELOPE [VCA]";
+    }
     g.drawText(headerStr,
                juce::Rectangle<float>(screenBounds.getX() + 6.0f, screenBounds.getY() + 3.0f,
                                       screenBounds.getWidth() - 12.0f, 12.0f),

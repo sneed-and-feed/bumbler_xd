@@ -20,6 +20,7 @@ public:
 
     void paint(juce::Graphics&) override;
     void resized() override;
+    void mouseDown(const juce::MouseEvent& e) override;
 
     void parameterChanged(const juce::String& parameterID, float newValue) override;
 
@@ -57,6 +58,9 @@ private:
     KnobSlot*   findKnob(const juce::String& paramId);
     ButtonSlot* findButton(const juce::String& paramId);
     ComboSlot*  findCombo(const juce::String& paramId);
+
+    void showKnobContextMenu(KnobSlot& slot, juce::Point<int> screenPos);
+    void showFaderContextMenu(juce::Point<int> screenPos);
 
     BumblerAudioProcessor& mProcessor;
     BumblerLookAndFeel     mLookAndFeel;

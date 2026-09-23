@@ -26,6 +26,9 @@ BumblerAudioProcessorEditor::BumblerAudioProcessorEditor(BumblerAudioProcessor& 
     apvts.addParameterListener("filterSustain", this);
     apvts.addParameterListener("filterRelease", this);
 
+    apvts.addParameterListener("filterEnvAmount", this);
+    apvts.addParameterListener("envLink", this);
+
     apvts.addParameterListener("ampAttack", this);
     apvts.addParameterListener("ampDecay", this);
     apvts.addParameterListener("ampSustain", this);
@@ -34,6 +37,9 @@ BumblerAudioProcessorEditor::BumblerAudioProcessorEditor(BumblerAudioProcessor& 
     // Initial LCD curve build
     updateLcdDisplays();
 
+    // Listen to all mouse events on child components
+    addMouseListener(this, true);
+
     // Standard rack-mount default size
     setSize(1120, 700);
     setResizable(true, true);
@@ -41,6 +47,7 @@ BumblerAudioProcessorEditor::BumblerAudioProcessorEditor(BumblerAudioProcessor& 
 }
 
 BumblerAudioProcessorEditor::~BumblerAudioProcessorEditor() {
+    removeMouseListener(this);
     setLookAndFeel(nullptr);
 
     // 1. Unregister APVTS parameter listeners
@@ -49,6 +56,9 @@ BumblerAudioProcessorEditor::~BumblerAudioProcessorEditor() {
     apvts.removeParameterListener("filterDecay", this);
     apvts.removeParameterListener("filterSustain", this);
     apvts.removeParameterListener("filterRelease", this);
+
+    apvts.removeParameterListener("filterEnvAmount", this);
+    apvts.removeParameterListener("envLink", this);
 
     apvts.removeParameterListener("ampAttack", this);
     apvts.removeParameterListener("ampDecay", this);
@@ -85,12 +95,25 @@ void BumblerAudioProcessorEditor::updateLcdDisplays() {
         return 0.0f;
     };
 
-    mFilterLcdDisplay.setEnvelopeParameters(
-        getVal("filterAttack"),
-        getVal("filterDecay"),
-        getVal("filterSustain"),
-        getVal("filterRelease")
-    );
+    const float envAmt = getVal("filterEnvAmount");
+    const bool isLinked = (getVal("envLink") > 0.5f);
+    mFilterLcdDisplay.setFilterModulationStatus(envAmt, isLinked);
+    if (isLinked) {
+        // When linked, filter envelope curve mirrors amp envelope
+        mFilterLcdDisplay.setEnvelopeParameters(
+            getVal("ampAttack"),
+            getVal("ampDecay"),
+            getVal("ampSustain"),
+            getVal("ampRelease")
+        );
+    } else {
+        mFilterLcdDisplay.setEnvelopeParameters(
+            getVal("filterAttack"),
+            getVal("filterDecay"),
+            getVal("filterSustain"),
+            getVal("filterRelease")
+        );
+    }
 
     mAmpLcdDisplay.setEnvelopeParameters(
         getVal("ampAttack"),
@@ -177,6 +200,210 @@ BumblerAudioProcessorEditor::ComboSlot* BumblerAudioProcessorEditor::findCombo(c
         if (c->paramId == paramId) return c.get();
     }
     return nullptr;
+}
+
+void BumblerAudioProcessorEditor::mouseDown(const juce::MouseEvent& e) {
+    if (e.mods.isPopupMenu()) {
+        // Check if clicked component is within mOscMixFader
+        if (e.eventComponent == &mOscMixFader || mOscMixFader.isParentOf(e.eventComponent)
+            || e.eventComponent == &mOscMixFader.getSlider() || mOscMixFader.getSlider().isParentOf(e.eventComponent)) {
+            showFaderContextMenu(e.getScreenPosition());
+            return;
+        }
+        // Check if clicked component is within any KnobSlot
+        for (auto& slot : mKnobs) {
+            if (e.eventComponent == &slot->slider || slot->slider.isParentOf(e.eventComponent)
+                || e.eventComponent == &slot->nameLabel || slot->nameLabel.isParentOf(e.eventComponent)) {
+                showKnobContextMenu(*slot, e.getScreenPosition());
+                return;
+            }
+        }
+    }
+}
+
+void BumblerAudioProcessorEditor::showKnobContextMenu(KnobSlot& slot, juce::Point<int> screenPos) {
+    auto* param = mProcessor.getApvts().getParameter(slot.paramId);
+    if (param != nullptr) {
+        if (auto* hContext = getHostContext()) {
+            if (auto hostMenu = hContext->getContextMenuForParameter(param)) {
+                const auto localPos = getLocalPoint(nullptr, screenPos);
+                hostMenu->showNativeMenu(localPos);
+                return;
+            }
+        }
+    }
+
+    auto* rangedParam = dynamic_cast<juce::RangedAudioParameter*>(param);
+
+    juce::PopupMenu menu;
+    const juce::String currentValueStr = slot.slider.getTextFromValue(slot.slider.getValue());
+    const juce::String headerText = (slot.nameLabel.getText().isNotEmpty() ? slot.nameLabel.getText() : slot.paramId)
+                                  + "  (" + currentValueStr + ")";
+    menu.addSectionHeader(headerText);
+    menu.addSeparator();
+
+    juce::String defaultText;
+    double defaultDenormVal = 0.0;
+    if (rangedParam != nullptr) {
+        defaultDenormVal = static_cast<double>(rangedParam->getNormalisableRange().convertFrom0to1(rangedParam->getDefaultValue()));
+        defaultText = rangedParam->getText(rangedParam->getDefaultValue(), 1024);
+        if (defaultText.isEmpty()) {
+            defaultText = slot.slider.getTextFromValue(defaultDenormVal);
+        }
+    } else {
+        defaultDenormVal = slot.slider.getMinimum();
+        defaultText = slot.slider.getTextFromValue(defaultDenormVal);
+    }
+
+    menu.addItem(1, "Reset to Default (" + defaultText + ")");
+    menu.addItem(2, "Set to Minimum (" + slot.slider.getTextFromValue(slot.slider.getMinimum()) + ")");
+    menu.addItem(3, "Set to Maximum (" + slot.slider.getTextFromValue(slot.slider.getMaximum()) + ")");
+    menu.addSeparator();
+    menu.addItem(4, "Set to Exact Value...");
+
+    juce::Component::SafePointer<BumblerAudioProcessorEditor> safeThis(this);
+    const juce::String paramId = slot.paramId;
+    const juce::String paramName = slot.nameLabel.getText().isNotEmpty() ? slot.nameLabel.getText() : slot.paramId;
+
+    menu.showMenuAsync(
+        juce::PopupMenu::Options()
+            .withTargetScreenArea(juce::Rectangle<int>(screenPos.x, screenPos.y, 1, 1))
+            .withTargetComponent(&slot.slider)
+            .withParentComponent(this),
+        [safeThis, paramId, paramName, defaultDenormVal](int result) {
+            if (safeThis == nullptr || result <= 0) {
+                return;
+            }
+
+            auto* currentSlot = safeThis->findKnob(paramId);
+            if (currentSlot == nullptr) {
+                return;
+            }
+
+            if (result == 1) {
+                currentSlot->slider.setValue(defaultDenormVal, juce::sendNotificationSync);
+            } else if (result == 2) {
+                currentSlot->slider.setValue(currentSlot->slider.getMinimum(), juce::sendNotificationSync);
+            } else if (result == 3) {
+                currentSlot->slider.setValue(currentSlot->slider.getMaximum(), juce::sendNotificationSync);
+            } else if (result == 4) {
+                auto* alert = new juce::AlertWindow("Set Exact Value",
+                                                    "Enter value for " + paramName + ":",
+                                                    juce::AlertWindow::NoIcon,
+                                                    safeThis.getComponent());
+                alert->addTextEditor("val", currentSlot->slider.getTextFromValue(currentSlot->slider.getValue()), "Value:");
+                alert->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+                alert->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+                if (auto* te = alert->getTextEditor("val")) {
+                    te->selectAll();
+                }
+
+                alert->enterModalState(true, juce::ModalCallbackFunction::create(
+                    [safeThis, alert, paramId](int modalResult) {
+                        if (safeThis == nullptr || modalResult != 1) {
+                            return;
+                        }
+
+                        auto* s = safeThis->findKnob(paramId);
+                        if (s == nullptr) {
+                            return;
+                        }
+
+                        const juce::String entered = alert->getTextEditorContents("val");
+                        const double val = s->slider.getValueFromText(entered);
+                        s->slider.setValue(val, juce::sendNotificationSync);
+                    }), true);
+            }
+        });
+}
+
+void BumblerAudioProcessorEditor::showFaderContextMenu(juce::Point<int> screenPos) {
+    auto* param = mProcessor.getApvts().getParameter(ParamIDs::oscMix.getParamID());
+    if (param != nullptr) {
+        if (auto* hContext = getHostContext()) {
+            if (auto hostMenu = hContext->getContextMenuForParameter(param)) {
+                const auto localPos = getLocalPoint(nullptr, screenPos);
+                hostMenu->showNativeMenu(localPos);
+                return;
+            }
+        }
+    }
+
+    auto* rangedParam = dynamic_cast<juce::RangedAudioParameter*>(param);
+
+    juce::PopupMenu menu;
+    auto& slider = mOscMixFader.getSlider();
+    const juce::String currentValueStr = slider.getTextFromValue(slider.getValue());
+    const juce::String headerText = "OSC Mix  (" + currentValueStr + ")";
+    menu.addSectionHeader(headerText);
+    menu.addSeparator();
+
+    juce::String defaultText;
+    double defaultDenormVal = 0.5;
+    if (rangedParam != nullptr) {
+        defaultDenormVal = static_cast<double>(rangedParam->getNormalisableRange().convertFrom0to1(rangedParam->getDefaultValue()));
+        defaultText = rangedParam->getText(rangedParam->getDefaultValue(), 1024);
+        if (defaultText.isEmpty()) {
+            defaultText = slider.getTextFromValue(defaultDenormVal);
+        }
+    } else {
+        defaultDenormVal = slider.getMinimum();
+        defaultText = slider.getTextFromValue(defaultDenormVal);
+    }
+
+    menu.addItem(1, "Reset to Default (" + defaultText + ")");
+    menu.addItem(2, "Set to Minimum (" + slider.getTextFromValue(slider.getMinimum()) + ")");
+    menu.addItem(3, "Set to Maximum (" + slider.getTextFromValue(slider.getMaximum()) + ")");
+    menu.addSeparator();
+    menu.addItem(4, "Set to Exact Value...");
+
+    juce::Component::SafePointer<BumblerAudioProcessorEditor> safeThis(this);
+
+    menu.showMenuAsync(
+        juce::PopupMenu::Options()
+            .withTargetScreenArea(juce::Rectangle<int>(screenPos.x, screenPos.y, 1, 1))
+            .withTargetComponent(&slider)
+            .withParentComponent(this),
+        [safeThis, defaultDenormVal](int result) {
+            if (safeThis == nullptr || result <= 0) {
+                return;
+            }
+
+            auto& s = safeThis->mOscMixFader.getSlider();
+
+            if (result == 1) {
+                s.setValue(defaultDenormVal, juce::sendNotificationSync);
+            } else if (result == 2) {
+                s.setValue(s.getMinimum(), juce::sendNotificationSync);
+            } else if (result == 3) {
+                s.setValue(s.getMaximum(), juce::sendNotificationSync);
+            } else if (result == 4) {
+                auto* alert = new juce::AlertWindow("Set Exact Value",
+                                                    "Enter value for OSC Mix:",
+                                                    juce::AlertWindow::NoIcon,
+                                                    safeThis.getComponent());
+                alert->addTextEditor("val", s.getTextFromValue(s.getValue()), "Value:");
+                alert->addButton("OK", 1, juce::KeyPress(juce::KeyPress::returnKey));
+                alert->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+                if (auto* te = alert->getTextEditor("val")) {
+                    te->selectAll();
+                }
+
+                alert->enterModalState(true, juce::ModalCallbackFunction::create(
+                    [safeThis, alert](int modalResult) {
+                        if (safeThis == nullptr || modalResult != 1) {
+                            return;
+                        }
+
+                        auto& faderSlider = safeThis->mOscMixFader.getSlider();
+                        const juce::String entered = alert->getTextEditorContents("val");
+                        const double val = faderSlider.getValueFromText(entered);
+                        faderSlider.setValue(val, juce::sendNotificationSync);
+                    }), true);
+            }
+        });
 }
 
 void BumblerAudioProcessorEditor::setupUI() {
