@@ -18,19 +18,19 @@ jobs:
           - name: Windows (MSVC x64)
             os: windows-latest
             cmake_args: ""
-            build_args: "--config Release"
+            build_args: "--config Release --parallel 2"
             ctest_args: "-C Release"
 
           - name: macOS Universal (ARM64 + x86_64)
             os: macos-14
             cmake_args: '-DCMAKE_BUILD_TYPE=Release "-DCMAKE_OSX_ARCHITECTURES=arm64;x86_64"'
-            build_args: "--config Release"
+            build_args: "--config Release --parallel 3"
             ctest_args: "-C Release"
 
           - name: Ubuntu Linux (GCC x64)
             os: ubuntu-latest
             cmake_args: "-DCMAKE_BUILD_TYPE=Release"
-            build_args: "--config Release"
+            build_args: "--config Release --parallel 2"
             ctest_args: "-C Release"
 
     steps:
@@ -40,6 +40,10 @@ jobs:
       - name: Install Linux Audio & GUI Dependencies
         if: runner.os == 'Linux'
         run: |
+          sudo fallocate -l 4G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
           sudo apt-get update
           sudo apt-get install -y \
             libasound2-dev \
@@ -58,13 +62,19 @@ jobs:
             libxinerama-dev \
             libxrandr-dev \
             libxrender-dev \
-            libxi-dev
+            libxi-dev \
+            xvfb
 
       - name: Configure CMake
         run: cmake -B build ${{ matrix.cmake_args }}
 
       - name: Build All Targets (Plugin + Tests)
-        run: cmake --build build ${{ matrix.build_args }} --parallel
+        run: cmake --build build ${{ matrix.build_args }}
 
-      - name: Run CTest Verification Suite (21 Suites)
+      - name: Run CTest Verification Suite (Linux with Xvfb)
+        if: runner.os == 'Linux'
+        run: xvfb-run --auto-servernum ctest --test-dir build ${{ matrix.ctest_args }} --output-on-failure
+
+      - name: Run CTest Verification Suite (Windows & macOS)
+        if: runner.os != 'Linux'
         run: ctest --test-dir build ${{ matrix.ctest_args }} --output-on-failure

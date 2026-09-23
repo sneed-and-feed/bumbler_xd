@@ -71,6 +71,10 @@ jobs:
 
       - name: Install Linux Dependencies
         run: |
+          sudo fallocate -l 4G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=4096
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
           sudo apt-get update
           sudo apt-get install -y \
             libasound2-dev \
