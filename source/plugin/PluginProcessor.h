@@ -38,7 +38,9 @@ public:
     void setCurrentProgram(int index) override;
     const juce::String getProgramName(int index) override;
     void changeProgramName(int index, const juce::String& newName) override;
+    void applyParameterSnapshot(const ParameterSnapshot& p);
     void loadPreset(int index);
+    void loadHomagePreset(int index);
 
     // DAW State Recall
     void getStateInformation(juce::MemoryBlock& destData) override;

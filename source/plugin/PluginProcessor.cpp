@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "parameters/MigratedPresets.h"
 
 namespace bumbler {
 
@@ -120,14 +121,7 @@ void BumblerAudioProcessor::changeProgramName(int, const juce::String&) {
     // Factory presets are read-only
 }
 
-void BumblerAudioProcessor::loadPreset(int index) {
-    const auto& presets = getFactoryPresets();
-    if (index < 0 || index >= static_cast<int>(presets.size()))
-        return;
-
-    mCurrentProgramIndex.store(index, std::memory_order_relaxed);
-    const auto& p = presets[static_cast<size_t>(index)].params;
-
+void BumblerAudioProcessor::applyParameterSnapshot(const ParameterSnapshot& p) {
     auto setParam = [this](const juce::ParameterID& id, float value) {
         if (auto* param = mApvts.getParameter(id.getParamID())) {
             const auto range = mApvts.getParameterRange(id.getParamID());
@@ -200,6 +194,24 @@ void BumblerAudioProcessor::loadPreset(int index) {
     setParam(ParamIDs::analogMode,   p.analogMode);
     setParam(ParamIDs::wNoiseMode,   p.wNoiseMode);
     setParam(ParamIDs::masterVolume, p.masterVolume);
+}
+
+void BumblerAudioProcessor::loadPreset(int index) {
+    const auto& presets = getFactoryPresets();
+    if (index < 0 || index >= static_cast<int>(presets.size()))
+        return;
+
+    mCurrentProgramIndex.store(index, std::memory_order_relaxed);
+    applyParameterSnapshot(presets[static_cast<size_t>(index)].params);
+}
+
+void BumblerAudioProcessor::loadHomagePreset(int index) {
+    const auto& presets = getMigratedPresets();
+    if (index < 0 || index >= static_cast<int>(presets.size()))
+        return;
+
+    mCurrentProgramIndex.store(5 + index, std::memory_order_relaxed);
+    applyParameterSnapshot(presets[static_cast<size_t>(index)].params);
 }
 
 // ============================================================================

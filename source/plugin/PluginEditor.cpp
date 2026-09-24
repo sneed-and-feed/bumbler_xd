@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "parameters/MigratedPresets.h"
 
 namespace bumbler {
 
@@ -413,14 +414,28 @@ void BumblerAudioProcessorEditor::setupUI() {
     mPresetLabel.setColour(juce::Label::textColourId, juce::Colour(BumblerColours::WaspYellow));
     addAndMakeVisible(mPresetLabel);
 
+    mPresetComboBox.addSectionHeading("── FACTORY PRESETS ──");
     for (int i = 0; i < mProcessor.getNumPrograms(); ++i) {
         mPresetComboBox.addItem(mProcessor.getProgramName(i), i + 1);
     }
-    mPresetComboBox.setSelectedId(mProcessor.getCurrentProgram() + 1, juce::dontSendNotification);
+
+    mPresetComboBox.addSectionHeading("── HOMAGE PRESETS ──");
+    const auto& homagePresets = getMigratedPresets();
+    for (size_t i = 0; i < homagePresets.size(); ++i) {
+        mPresetComboBox.addItem(homagePresets[i].name, static_cast<int>(6 + i));
+    }
+
+    const int curProg = mProcessor.getCurrentProgram();
+    if (curProg >= 0 && curProg < 20) {
+        mPresetComboBox.setSelectedId(curProg + 1, juce::dontSendNotification);
+    }
     mPresetComboBox.onChange = [this]() {
-        const int selected = mPresetComboBox.getSelectedId() - 1;
-        if (selected >= 0 && selected < mProcessor.getNumPrograms()) {
-            mProcessor.setCurrentProgram(selected);
+        const int selectedId = mPresetComboBox.getSelectedId();
+        if (selectedId >= 1 && selectedId <= 5) {
+            mProcessor.setCurrentProgram(selectedId - 1);
+            updateLcdDisplays();
+        } else if (selectedId >= 6 && selectedId <= 20) {
+            mProcessor.loadHomagePreset(selectedId - 6);
             updateLcdDisplays();
         }
     };
@@ -569,8 +584,8 @@ void BumblerAudioProcessorEditor::resized() {
     const int pad = 10;
 
     // Header Controls Layout (Y = 10 to 60)
-    mPresetLabel.setBounds(200, 24, 60, 22);
-    mPresetComboBox.setBounds(265, 24, 120, 22);
+    mPresetLabel.setBounds(185, 24, 60, 22);
+    mPresetComboBox.setBounds(248, 24, 145, 22);
 
     if (auto* b = findButton("driveEnabled")) b->button.setBounds(400, 23, 75, 24);
     if (auto* k = findKnob("driveAmount")) {
