@@ -126,7 +126,7 @@ Bumbler XD organizes its synthesizer parameters into 5 logical functional groups
 | APVTS Parameter ID | Type | Range | Default | Unit | Legacy Mapping & Semantic Description |
 |---|---|---|---|---|---|
 | `filterMode` | Choice | `0..5` | `1` | - | `0: LP12`, `1: LP24`, `2: LP+NT`, `3: DBL.NT`, `4: BP24`, `5: HP24`. |
-| `filterCutoff` | Float | `20.0..20000.0` | `1200.0` | `Hz` | Logarithmically scaled base cutoff frequency: \( f = 20 \cdot 1000^{\text{norm}} \). |
+| `filterCutoff` | Float | `20.0..20000.0` | `1200.0` | `Hz` | Logarithmically scaled base cutoff frequency: $f = 20 \cdot 1000^{\text{norm}}$. |
 | `filterResonance` | Float | `0.0..1.0` | `0.20` | `%` | Filter resonance / Q factor (self-oscillates above ~`0.85`). |
 | `filterKbTrack` | Float | `0.0..1.0` | `0.50` | `%` | Keyboard pitch tracking depth (1:1 tracking at `1.0`). |
 | `filterEnvAmount` | Float | `-1.0..1.0` | `0.0` | `%` | Bipolar filter envelope modulation depth (-100% to +100%). |
@@ -186,42 +186,42 @@ Bumbler XD organizes its synthesizer parameters into 5 logical functional groups
 
 ## 4. Mathematical Transformation Curves
 
-Legacy synthesizers typically expose parameters as normalized floating-point numbers in the range \([0.0, 1.0]\) or 8-bit integers \([0, 255]\). Bumbler XD's importer applies rigorous mathematical domain mappings:
+Legacy synthesizers typically expose parameters as normalized floating-point numbers in the range $[0.0, 1.0]$ or 8-bit integers $[0, 255]$. Bumbler XD's importer applies rigorous mathematical domain mappings:
 
 ### 4.1 Logarithmic Cutoff Frequency Scaling
 Human pitch and frequency perception are logarithmic. A linear mapping causes 90% of the knob travel to bunch up in the ultra-high frequencies. Bumbler XD employs logarithmic scaling:
 
-\[
+```math
 f(\text{norm}) = 20.0 \cdot \left( \frac{20000.0}{20.0} \right)^{\text{norm}} = 20.0 \cdot 1000.0^{\text{norm}} \quad (\text{Hz})
-\]
+```
 
-- When \(\text{norm} = 0.0\): \(f = 20.0 \text{ Hz}\) (Sub-audible floor).
-- When \(\text{norm} = 0.5\): \(f = 20.0 \cdot \sqrt{1000} \approx 632.45 \text{ Hz}\) (Acoustic center).
-- When \(\text{norm} = 1.0\): \(f = 20000.0 \text{ Hz}\) (Nyquist boundary).
+- When $\text{norm} = 0.0$: $f = 20.0\text{ Hz}$ (Sub-audible floor).
+- When $\text{norm} = 0.5$: $f = 20.0 \cdot \sqrt{1000} \approx 632.45\text{ Hz}$ (Acoustic center).
+- When $\text{norm} = 1.0$: $f = 20000.0\text{ Hz}$ (Nyquist boundary).
 
-If the parsed value is already in Hz (\(> 1.0\)), it is clamped directly to \([20.0, 20000.0] \text{ Hz}\).
+If the parsed value is already in Hz $(> 1.0)$, it is clamped directly to $[20.0, 20000.0]\text{ Hz}$.
 
 ### 4.2 Exponential Time Curve Scaling
-Envelope stage times (Attack, Decay, Release) are mapped across four decades of dynamic range from \(1 \text{ ms}\) (\(0.001 \text{ s}\)) to \(10 \text{ s}\):
+Envelope stage times (Attack, Decay, Release) are mapped across four decades of dynamic range from $1\text{ ms}$ $(0.001\text{ s})$ to $10\text{ s}$:
 
-\[
+```math
 t(\text{norm}) = t_{\text{min}} \cdot \left( \frac{t_{\text{max}}}{t_{\text{min}}} \right)^{\text{norm}} = 0.001 \cdot 10000.0^{\text{norm}} \quad (\text{seconds})
-\]
+```
 
-- \(\text{norm} = 0.0 \implies 0.001 \text{ s}\) (\(1 \text{ ms}\), snappy click/transient).
-- \(\text{norm} = 0.25 \implies 0.01 \text{ s}\) (\(10 \text{ ms}\), punchy bass).
-- \(\text{norm} = 0.50 \implies 0.10 \text{ s}\) (\(100 \text{ ms}\), pluck/stab).
-- \(\text{norm} = 0.75 \implies 1.00 \text{ s}\) (\(1 \text{ s}\), standard decay).
-- \(\text{norm} = 1.00 \implies 10.0 \text{ s}\) (\(10 \text{ s}\), ambient drone).
+- $\text{norm} = 0.00 \implies 0.001\text{ s}$ (1 ms, snappy click/transient).
+- $\text{norm} = 0.25 \implies 0.01\text{ s}$ (10 ms, punchy bass).
+- $\text{norm} = 0.50 \implies 0.10\text{ s}$ (100 ms, pluck/stab).
+- $\text{norm} = 0.75 \implies 1.00\text{ s}$ (1 s, standard decay).
+- $\text{norm} = 1.00 \implies 10.0\text{ s}$ (10 s, ambient drone).
 
 ### 4.3 Bipolar Envelope & Mod Amount Conversion
-Parameters with a neutral center position (such as Filter Envelope Depth and Modulation Depth) are mapped linearly from unipolar \([0.0, 1.0]\) to bipolar \([-1.0, +1.0]\):
+Parameters with a neutral center position (such as Filter Envelope Depth and Modulation Depth) are mapped linearly from unipolar $[0.0, 1.0]$ to bipolar $[-1.0, +1.0]$:
 
-\[
+```math
 v_{\text{bipolar}}(\text{norm}) = 2.0 \cdot \text{norm} - 1.0
-\]
+```
 
-If the input is already signed negative, it is treated as a pre-scaled bipolar quantity and clamped to \([-1.0, 1.0]\).
+If the input is already signed negative, it is treated as a pre-scaled bipolar quantity and clamped to $[-1.0, 1.0]$.
 
 ---
 

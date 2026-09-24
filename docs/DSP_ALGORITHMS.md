@@ -150,8 +150,8 @@ where $dt$ is the normalized phase increment per sample:
 dt = \frac{f_0}{f_s}
 ```
 
-Let $x = t / dt$ represent the normalized distance to the discontinuity in units of samples ($x \in [-2, 2]$). The 4th-order polynomial residual $R(x)$ satisfies the following boundary constraints:
-1. Complete continuity ($C^0, C^1, C^2$) at the boundaries $x = \pm 2$.
+Let $x = t / dt$ represent the normalized distance to the discontinuity in units of samples, where $x \in [-2, 2]$. The 4th-order polynomial residual $R(x)$ satisfies the following boundary constraints:
+1. Complete continuity $(C^0, C^1, C^2)$ at the boundaries $x = \pm 2$.
 2. Cancellation of the jump discontinuity at $x = 0$.
 3. Exact integral equality matching the integrated sinc kernel.
 
@@ -275,7 +275,7 @@ The 4th-order kernel suppresses aliasing across all playable octaves. The follow
 | C6 | $1046.5\text{ Hz}$ | $-19.1\text{ dBFS}$ | $-62.8\text{ dBFS}$ | $43.7\text{ dB}$ |
 | C7 | $2093.0\text{ Hz}$ | $-13.2\text{ dBFS}$ | $-54.9\text{ dBFS}$ | $41.7\text{ dB}$ |
 
-Even at the extreme upper pitch limit C7 ($2093\text{ Hz}$), Bumbler XD guarantees $>41\text{ dB}$ alias rejection above the Nyquist threshold, eliminating audible inharmonic artifacts.
+Even at the extreme upper pitch limit C7 (2093 Hz), Bumbler XD guarantees $>41\text{ dB}$ alias rejection above the Nyquist threshold, eliminating audible inharmonic artifacts.
 
 ---
 
@@ -331,7 +331,7 @@ To align the digital frequency response with the continuous-time analog filter, 
 g = \tan\left(\frac{\pi f_c}{f_s}\right)
 ```
 
-where $f_c$ is clamped to $[20.0\text{ Hz}, 0.48 \cdot f_s]$ to prevent numerical divergence of the tangent function near Nyquist.
+where the cutoff frequency satisfies $f_c \in [20.0\text{ Hz}, 0.48 \cdot f_s]$ to prevent numerical divergence of the tangent function near Nyquist.
 
 ### 3.3 Algebraic Loop Resolution (Topology-Preserving Transform)
 
@@ -361,7 +361,7 @@ v_{\mathrm{lp}}[n] = v_2[n] + s_2[n-1]
 s_2[n] = v_{\mathrm{lp}}[n] + v_2[n] = 2 v_2[n] + s_2[n-1]
 ```
 
-Substituting $v_{\mathrm{bp}}[n]$ and $v_{\mathrm{lp}}[n]$ into the highpass node equation:
+Substituting the states $v_{\mathrm{bp}}[n], v_{\mathrm{lp}}[n]$ into the highpass node equation:
 
 ```math
 v_{\mathrm{hp}}[n] = v_{\mathrm{in}}[n] - k \cdot (g \cdot v_{\mathrm{hp}}[n] + s_1[n-1]) - (g \cdot (g \cdot v_{\mathrm{hp}}[n] + s_1[n-1]) + s_2[n-1])
@@ -413,7 +413,7 @@ s_2[n] = v_{\mathrm{lp}}[n] + v_2
 v_{\mathrm{notch}}[n] = v_{\mathrm{hp}}[n] + v_{\mathrm{lp}}[n]
 ```
 
-State variables $s_1[n]$ and $s_2[n]$ are clamped to $[-12.0, 12.0]$ and flushed of denormals to guarantee numerical stability under infinite resonance sweeps.
+State variables $s_1[n], s_2[n]$ are clamped to $[-12.0, 12.0]$ and flushed of denormals to guarantee numerical stability under infinite resonance sweeps.
 
 ### 3.4 The 6 Wasp XT Filter Topologies
 
@@ -474,7 +474,7 @@ v_{\mathrm{norm1}}[n] = k \cdot v_{\mathrm{bp1}}[n]
 y[n] = k \cdot v_{\mathrm{bp2}}[n]
 ```
 
-Normalization ensures unity passband gain ($0.0\text{ dB} \pm 1.0\text{ dB}$) at the resonant peak.
+Normalization ensures unity passband gain $(0.0\text{ dB} \pm 1.0\text{ dB})$ at the resonant peak.
 
 #### Mode 5: HP24 (4-Pole Cascaded Highpass)
 Two cascaded 2-pole highpass stages delivering $-24\text{ dB/oct}$ nominal roll-off (measured at $-26.95\text{ dB/oct}$):
@@ -499,7 +499,7 @@ where $G = 1.20$ is the inverter gain scaling factor. Expanding into a Taylor se
 f(v) = v - \frac{G^2}{3} v^3 + \frac{2 G^4}{15} v^5 - \mathcal{O}(v^7)
 ```
 
-For small signals ($v \ll 1$), the circuit behaves linearly ($f(v) \approx v$). As resonance builds ($v > 0.8$), the cubic term $-\frac{1.44}{3} v^3$ generates 3rd-harmonic compression, stabilizing the resonance loop without hard clipping.
+For small signals $(v \ll 1)$, the circuit behaves linearly $(f(v) \approx v)$. As resonance builds $(v > 0.8)$, the cubic term $-\frac{1.44}{3} v^3$ generates 3rd-harmonic compression, stabilizing the resonance loop without hard clipping.
 
 ---
 
@@ -507,7 +507,7 @@ For small signals ($v \ll 1$), the circuit behaves linearly ($f(v) \approx v$). 
 
 ### 4.1 Linear Audio-Rate Frequency Modulation (FM)
 
-In Bumbler XD, OSC 1 modulates the phase of OSC 2 at audio rates. Let $\omega_1$ and $\omega_2$ represent the angular frequencies of OSC 1 and OSC 2:
+In Bumbler XD, OSC 1 modulates the phase of OSC 2 at audio rates. Let $\omega_1, \omega_2$ represent the angular frequencies of OSC 1 and OSC 2:
 
 ```math
 x_1(t) = A_1 \cdot \sin(\omega_1 t)
@@ -540,8 +540,8 @@ By the Jacobi-Anger expansion, the spectrum of a carrier modulated by an audio-r
 ```
 
 Key mathematical invariants of this FM implementation:
-1. **Harmonic Spacing:** Sideband frequencies occur at $f_{\mathrm{side}} = \lvert f_2 \pm n \cdot f_1 \rvert$. When $f_2$ and $f_1$ form integer ratios (e.g. 1:1, 2:1, 3:2), the sidebands form musically consonant harmonic series.
-2. **Carrier Suppression:** The carrier amplitude follows $J_0(\beta)$. At $\beta \approx 2.4048$, $J_0(\beta) = 0$, achieving total carrier nulling.
+1. **Harmonic Spacing:** Sideband frequencies occur at $f_{\mathrm{side}} = \lvert f_2 \pm n \cdot f_1 \rvert$. When carrier and modulator form integer ratios (e.g. 1:1, 2:1, 3:2), the sidebands form musically consonant harmonic series.
+2. **Carrier Suppression:** The carrier amplitude follows $J_0(\beta)$; at $\beta \approx 2.4048$, the zeroth Bessel coefficient vanishes identically, achieving total carrier nulling.
 3. **Bessel Recurrence Relation:** Sideband amplitudes satisfy:
 
 ```math
@@ -560,7 +560,7 @@ The Bumbler XD ring modulator performs four-quadrant analog multiplication betwe
 y_{\mathrm{raw}}[n] = x_1[n] \cdot x_2[n]
 ```
 
-For two sinusoids $\cos(\omega_1 t)$ and $\cos(\omega_2 t)$:
+For two sinusoids $\cos(\omega_1 t), \cos(\omega_2 t)$:
 
 ```math
 \cos(\omega_1 t) \cdot \cos(\omega_2 t) = \frac{1}{2} \left[\cos((\omega_1 + \omega_2) t) + \cos((\omega_1 - \omega_2) t)\right]
@@ -636,6 +636,7 @@ Expanding $y_{\mathrm{sat}}$ via Maclaurin series reveals both even and odd harm
 ```math
 y_{\mathrm{sat}} = x + 0.15 x^2 - \frac{1}{3} x^3 - 0.10 x^4 + \mathcal{O}(x^5)
 ```
+
 - The linear term $x$ preserves fundamental clarity.
 - The quadratic term $+0.15 x^2$ produces warm second-harmonic saturation (octave overtone).
 - The cubic term $-\frac{1}{3} x^3$ produces odd-harmonic edge and punch.
@@ -659,6 +660,7 @@ The final tone output blends the smoothed and direct saturated signals:
 ```math
 y_{\mathrm{tone}}[n] = \mathrm{clamp}\left((1.0 - T) \cdot s_{\mathrm{tone}}[n] + T \cdot y_{\mathrm{sat}}[n], -1.05, 1.05\right)
 ```
+
 - At $T = 0.0$ (Dark): Output is heavily lowpass-filtered ($-17.7\text{ dB}$ attenuation at $10\text{ kHz}$).
 - At $T = 0.5$ (Neutral): Balanced presence response.
 - At $T = 1.0$ (Bright): Raw, unattenuated saturation with enhanced high frequencies.
@@ -854,11 +856,11 @@ L = \lfloor 0.005 \cdot f_s \rfloor
 ```
 
 Typical values for standard production sample rates:
-- At $f_s = 44100\text{ Hz}$: $L = \lfloor 220.5 \rfloor = 220\text{ samples}$ ($4.989\text{ ms}$)
-- At $f_s = 48000\text{ Hz}$: $L = \lfloor 240.0 \rfloor = 240\text{ samples}$ ($5.000\text{ ms}$)
-- At $f_s = 88200\text{ Hz}$: $L = \lfloor 441.0 \rfloor = 441\text{ samples}$ ($5.000\text{ ms}$)
-- At $f_s = 96000\text{ Hz}$: $L = \lfloor 480.0 \rfloor = 480\text{ samples}$ ($5.000\text{ ms}$)
-- At $f_s = 192000\text{ Hz}$: $L = \lfloor 960.0 \rfloor = 960\text{ samples}$ ($5.000\text{ ms}$)
+- At $f_s = 44100\text{ Hz}$: $L = \lfloor 220.5 \rfloor = 220\text{ samples}$ (4.989 ms)
+- At $f_s = 48000\text{ Hz}$: $L = \lfloor 240.0 \rfloor = 240\text{ samples}$ (5.000 ms)
+- At $f_s = 88200\text{ Hz}$: $L = \lfloor 441.0 \rfloor = 441\text{ samples}$ (5.000 ms)
+- At $f_s = 96000\text{ Hz}$: $L = \lfloor 480.0 \rfloor = 480\text{ samples}$ (5.000 ms)
+- At $f_s = 192000\text{ Hz}$: $L = \lfloor 960.0 \rfloor = 960\text{ samples}$ (5.000 ms)
 
 Let $n \in [0, L]$ denote the discrete sample counter elapsed since the voice steal event. The normalized transition progress is:
 
@@ -875,13 +877,13 @@ w[n] = \frac{1}{2} \left(1 - \cos\left(\frac{\pi n}{L}\right)\right), \quad n \i
 #### Complementary Gain Functions
 
 The crossfader establishes two complementary gain trajectories:
-1. **Fade-Out Gain ($g_{\mathrm{out}}[n]$):** Scales the latched output sample of the interrupted voice ($y_{\mathrm{old}}$), decaying smoothly from $1.0$ down to $0.0$:
+1. **Fade-Out Gain:** Scales the latched output sample of the interrupted voice $y_{\mathrm{old}}$, decaying smoothly from $1.0$ down to $0.0$:
 
 ```math
 g_{\mathrm{out}}[n] = 1 - w[n] = \frac{1}{2} \left(1 + \cos\left(\frac{\pi n}{L}\right)\right)
 ```
 
-2. **Fade-In Gain ($g_{\mathrm{in}}[n]$):** Scales the newly synthesized voice output ($y_{\mathrm{new}}[n]$), rising smoothly from $0.0$ up to $1.0$:
+2. **Fade-In Gain:** Scales the newly synthesized voice output $y_{\mathrm{new}}[n]$, rising smoothly from $0.0$ up to $1.0$:
 
 ```math
 g_{\mathrm{in}}[n] = w[n] = \frac{1}{2} \left(1 - \cos\left(\frac{\pi n}{L}\right)\right)
@@ -901,7 +903,7 @@ The total synthesized output sample $y_{\mathrm{out}}[n]$ rendered by the voice 
 y_{\mathrm{out}}[n] = g_{\mathrm{out}}[n] \cdot y_{\mathrm{old}} + g_{\mathrm{in}}[n] \cdot y_{\mathrm{new}}[n] = (1 - w[n]) \cdot y_{\mathrm{old}} + w[n] \cdot y_{\mathrm{new}}[n]
 ```
 
-In `Source/dsp/BumblerVoice.cpp`, the crossfader tracks remaining samples ($n_{\mathrm{rem}} \in [L, 0]$), evaluating:
+In `Source/dsp/BumblerVoice.cpp`, the crossfader tracks remaining samples $(n_{\mathrm{rem}} \in [L, 0])$, evaluating:
 - $\text{progress} = 1.0 - \frac{n_{\mathrm{rem}}}{L} = \frac{n}{L}$
 - $w_{\mathrm{impl}} = \frac{1}{2}\left(1 + \cos(\pi \cdot \text{progress})\right) \equiv g_{\mathrm{out}}[n]$
 - $y_{\mathrm{out}}[n] = (1.0 - w_{\mathrm{impl}}) \cdot y_{\mathrm{new}}[n] + w_{\mathrm{impl}} \cdot y_{\mathrm{old}} \equiv g_{\mathrm{in}}[n] \cdot y_{\mathrm{new}}[n] + g_{\mathrm{out}}[n] \cdot y_{\mathrm{old}}$
@@ -946,7 +948,7 @@ Evaluating the continuous Fourier transform of this derivative:
 \mathcal{F}\left\lbrace \frac{d y_{\mathrm{abrupt}}}{dt} \right\rbrace(\omega) = \int_{-\infty}^{\infty} -V_0 \delta(t) e^{-i\omega t} dt = -V_0
 ```
 
-By the differentiation property of the Fourier transform ($\mathcal{F}\lbrace y'\rbrace = i\omega \hat{y}(\omega)$), the spectrum of the jump discontinuity is:
+By the differentiation property of the Fourier transform, $\mathcal{F}\lbrace y'\rbrace = i\omega \hat{y}(\omega)$, the spectrum of the jump discontinuity is:
 
 ```math
 \hat{y}_{\mathrm{abrupt}}(\omega) = \frac{-V_0}{i\omega}
@@ -962,7 +964,7 @@ Consider an elementary linear crossfade of duration $T = L \cdot T_s$:
 w_{\mathrm{lin}}(t) = \begin{cases} 0 & \text{if } t < 0 \\ \frac{t}{T} & \text{if } 0 \le t \le T \\ 1 & \text{if } t > T \end{cases}
 ```
 
-While $w_{\mathrm{lin}}(t)$ is continuous ($C^0$), its first derivative contains two step discontinuities:
+While $w_{\mathrm{lin}}(t)$ is continuous $(C^0)$, its first derivative contains two step discontinuities:
 
 ```math
 \frac{d w_{\mathrm{lin}}}{dt} = \begin{cases} 0 & \text{if } t < 0 \\ \frac{1}{T} & \text{if } 0 < t < T \\ 0 & \text{if } t > T \end{cases}
@@ -992,11 +994,11 @@ The $\mathcal{O}(\omega^{-2})$ decay ($-12\text{ dB/oct}$) is insufficient to su
 
 #### Formal Proof of C¹ Continuity of the 5ms Hann Window
 
-We now prove that the Hann crossfade function $w(t)$ is continuously differentiable on all of $\mathbb{R}$ ($w \in C^1(\mathbb{R})$).
+We now prove that the Hann crossfade function $w(t)$ is continuously differentiable on all of $\mathbb{R}$, that is, $w \in C^1(\mathbb{R})$.
 
 ##### Definition of Continuous-Time Transition Function
 
-Let $T = L \cdot T_s = 0.005\text{ s}$ ($5.0\text{ ms}$). Define $w: \mathbb{R} \to [0, 1]$ by:
+Let $T = L \cdot T_s = 0.005\text{ s}$ (5.0 ms). Define $w: \mathbb{R} \to [0, 1]$ by:
 
 ```math
 w(t) = \begin{cases}
@@ -1009,33 +1011,33 @@ w(t) = \begin{cases}
 ##### Step 1: Proof of C⁰ (Zeroth-Order) Continuity Everywhere
 
 - For $t \in (-\infty, 0)$, $w(t) = 0$, which is infinitely differentiable.
-- For $t \in (0, T)$, $w(t) = \frac{1}{2}(1 - \cos(\pi t / T))$, which is smooth ($C^\infty$).
+- For $t \in (0, T)$, $w(t) = \frac{1}{2}(1 - \cos(\pi t / T))$, which is smooth of class $C^\infty$.
 - For $t \in (T, \infty)$, $w(t) = 1$, which is infinitely differentiable.
 
 We verify continuity at the transition boundaries $t = 0$ and $t = T$:
 
 **Boundary at $t = 0$:**
+
 ```math
-\lim_{t \to 0^-} w(t) = 0
+\begin{aligned}
+\lim_{t \to 0^-} w(t) &= 0 \\
+\lim_{t \to 0^+} w(t) &= \lim_{t \to 0^+} \frac{1}{2} \left(1 - \cos\left(\frac{\pi t}{T}\right)\right) = \frac{1}{2} (1 - \cos 0) = \frac{1}{2}(1 - 1) = 0 \\
+w(0) &= \frac{1}{2} (1 - \cos 0) = 0
+\end{aligned}
 ```
-```math
-\lim_{t \to 0^+} w(t) = \lim_{t \to 0^+} \frac{1}{2} \left(1 - \cos\left(\frac{\pi t}{T}\right)\right) = \frac{1}{2} (1 - \cos 0) = \frac{1}{2}(1 - 1) = 0
-```
-```math
-w(0) = \frac{1}{2} (1 - \cos 0) = 0
-```
+
 Because $\lim_{t \to 0^-} w(t) = \lim_{t \to 0^+} w(t) = w(0) = 0$, $w(t)$ is continuous at $t = 0$.
 
 **Boundary at $t = T$:**
+
 ```math
-\lim_{t \to T^-} w(t) = \lim_{t \to T^-} \frac{1}{2} \left(1 - \cos\left(\frac{\pi t}{T}\right)\right) = \frac{1}{2} (1 - \cos \pi) = \frac{1}{2}(1 - (-1)) = 1
+\begin{aligned}
+\lim_{t \to T^-} w(t) &= \lim_{t \to T^-} \frac{1}{2} \left(1 - \cos\left(\frac{\pi t}{T}\right)\right) = \frac{1}{2} (1 - \cos \pi) = \frac{1}{2}(1 - (-1)) = 1 \\
+\lim_{t \to T^+} w(t) &= 1 \\
+w(T) &= \frac{1}{2} (1 - \cos \pi) = 1
+\end{aligned}
 ```
-```math
-\lim_{t \to T^+} w(t) = 1
-```
-```math
-w(T) = \frac{1}{2} (1 - \cos \pi) = 1
-```
+
 Because $\lim_{t \to T^-} w(t) = \lim_{t \to T^+} w(t) = w(T) = 1$, $w(t)$ is continuous at $t = T$.
 
 Thus, $w \in C^0(\mathbb{R})$.
@@ -1045,41 +1047,41 @@ Thus, $w \in C^0(\mathbb{R})$.
 We compute the piecewise derivative $\frac{dw}{dt}$ on each open interval:
 - For $t < 0$: $\frac{dw}{dt} = 0$.
 - For $0 < t < T$:
+
 ```math
 \frac{dw}{dt} = \frac{d}{dt}\left[\frac{1}{2} - \frac{1}{2}\cos\left(\frac{\pi t}{T}\right)\right] = 0 - \frac{1}{2}\left(-\frac{\pi}{T}\sin\left(\frac{\pi t}{T}\right)\right) = \frac{\pi}{2T} \sin\left(\frac{\pi t}{T}\right)
 ```
+
 - For $t > T$: $\frac{dw}{dt} = 0$.
 
 We now evaluate the left and right derivatives at the boundary points $t = 0$ and $t = T$:
 
 **Boundary at $t = 0$:**
+
 ```math
-w'_-(0) = \lim_{t \to 0^-} \frac{w(t) - w(0)}{t - 0} = \lim_{t \to 0^-} \frac{0 - 0}{t} = 0
+\begin{aligned}
+w'_-(0) &= \lim_{t \to 0^-} \frac{w(t) - w(0)}{t - 0} = \lim_{t \to 0^-} \frac{0 - 0}{t} = 0 \\
+w'_+(0) &= \lim_{t \to 0^+} \frac{w(t) - w(0)}{t - 0} = \lim_{t \to 0^+} \frac{\frac{1}{2}(1 - \cos(\pi t / T))}{t} \stackrel{\text{H}}{=} \lim_{t \to 0^+} \frac{\frac{\pi}{2T} \sin(\pi t / T)}{1} = 0
+\end{aligned}
 ```
-```math
-w'_+(0) = \lim_{t \to 0^+} \frac{w(t) - w(0)}{t - 0} = \lim_{t \to 0^+} \frac{\frac{1}{2}(1 - \cos(\pi t / T))}{t}
-```
-Applying l'Hôpital's rule:
-```math
-w'_+(0) = \lim_{t \to 0^+} \frac{\frac{\pi}{2T} \sin(\pi t / T)}{1} = \frac{\pi}{2T} \sin(0) = 0
-```
+
 Because $w'_-(0) = w'_+(0) = 0$, the derivative exists and is unique at $t = 0$:
+
 ```math
 \left.\frac{dw}{dt}\right|_{t = 0} = 0
 ```
 
 **Boundary at $t = T$:**
+
 ```math
-w'_-(T) = \lim_{t \to T^-} \frac{w(t) - w(T)}{t - T} = \lim_{t \to T^-} \frac{\frac{1}{2}(1 - \cos(\pi t / T)) - 1}{t - T} = \lim_{t \to T^-} \frac{-\frac{1}{2}(1 + \cos(\pi t / T))}{t - T}
+\begin{aligned}
+w'_-(T) &= \lim_{t \to T^-} \frac{\frac{1}{2}(1 - \cos(\pi t / T)) - 1}{t - T} \stackrel{\text{H}}{=} \lim_{t \to T^-} \frac{\frac{\pi}{2T} \sin(\pi t / T)}{1} = 0 \\
+w'_+(T) &= \lim_{t \to T^+} \frac{w(t) - w(T)}{t - T} = \lim_{t \to T^+} \frac{1 - 1}{t - T} = 0
+\end{aligned}
 ```
-Applying l'Hôpital's rule:
-```math
-w'_-(T) = \lim_{t \to T^-} \frac{\frac{\pi}{2T} \sin(\pi t / T)}{1} = \frac{\pi}{2T} \sin(\pi) = 0
-```
-```math
-w'_+(T) = \lim_{t \to T^+} \frac{w(t) - w(T)}{t - T} = \lim_{t \to T^+} \frac{1 - 1}{t - T} = 0
-```
+
 Because $w'_-(T) = w'_+(T) = 0$, the derivative exists and is unique at $t = T$:
+
 ```math
 \left.\frac{dw}{dt}\right|_{t = T} = 0
 ```
@@ -1099,13 +1101,9 @@ In the discrete-time implementation, differentiating $w[n]$ with respect to inde
 ```
 
 Evaluating at boundary indices $n = 0$ and $n = L$:
-- At $n = 0$:
+
 ```math
-\left.\frac{dw}{dn}\right|_{n = 0} = \frac{\pi}{2L} \sin(0) = 0
-```
-- At $n = L$:
-```math
-\left.\frac{dw}{dn}\right|_{n = L} = \frac{\pi}{2L} \sin(\pi) = 0
+\left.\frac{dw}{dn}\right|_{n = 0} = \frac{\pi}{2L} \sin(0) = 0, \qquad \left.\frac{dw}{dn}\right|_{n = L} = \frac{\pi}{2L} \sin(\pi) = 0
 ```
 
 Both boundary slopes vanish identically.
@@ -1150,8 +1148,10 @@ The Fourier spectrum decays at $\mathcal{O}(\omega^{-3})$, yielding an asymptoti
 
 #### Acoustic Consequences for Voice Stealing
 
-1. **Suppression of DC-Offset Impulses:** Any arbitrary DC offset $V_0$ held by the stolen voice decays into silence along the curve $g_{\mathrm{out}}[n] \cdot V_0$. Because $\frac{dg_{\mathrm{out}}}{dn} = 0$ at $n = 0$, the decay enters tangentially with zero initial velocity, eliminating the Dirac delta spike $\delta(t)$ entirely.
-2. **Smooth Injection of New Voice Energy:** The newly allocated voice enters along $g_{\mathrm{in}}[n] \cdot y_{\mathrm{new}}[n]$. Because $\frac{dg_{\mathrm{in}}}{dn} = 0$ at $n = 0$, high-frequency transient splatter is suppressed to below $-96\text{ dBFS}$ across all audible frequencies.
+1. **Suppression of DC-Offset Impulses:** Any DC offset $V_0$ held by the stolen voice decays into silence.
+   The decay enters tangentially with zero initial velocity because $\left.\frac{dg_{\mathrm{out}}}{dn}\right|_{n=0} = 0$, eliminating the Dirac delta spike $\delta(t)$ entirely.
+2. **Smooth Injection of New Voice Energy:** The newly allocated voice enters along $g_{\mathrm{in}}[n] \cdot y_{\mathrm{new}}[n]$.
+   Because $\left.\frac{dg_{\mathrm{in}}}{dn}\right|_{n=0} = 0$, high-frequency transient splatter is suppressed to below $-96\text{ dBFS}$ across all audible frequencies.
 3. **No Phase Cancellation:** Because the transition window is strictly localized to $5.0\text{ ms}$ (less than half the period of an A1 $55\text{ Hz}$ note), low-frequency pitch clarity is preserved without comb-filtering notches.
 4. **Seamless Polyphony:** Under extreme polyphonic churn (e.g. 1,000-note stress cascades), stolen voices transition with zero audible pops, clicks, or clicks in the DAW output stream.
 
