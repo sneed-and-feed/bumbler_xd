@@ -414,12 +414,12 @@ void BumblerAudioProcessorEditor::setupUI() {
     mPresetLabel.setColour(juce::Label::textColourId, juce::Colour(BumblerColours::WaspYellow));
     addAndMakeVisible(mPresetLabel);
 
-    mPresetComboBox.addSectionHeading("── FACTORY PRESETS ──");
+    mPresetComboBox.addSectionHeading("FACTORY PRESETS");
     for (int i = 0; i < mProcessor.getNumPrograms(); ++i) {
         mPresetComboBox.addItem(mProcessor.getProgramName(i), i + 1);
     }
 
-    mPresetComboBox.addSectionHeading("── HOMAGE PRESETS ──");
+    mPresetComboBox.addSectionHeading("HOMAGE PRESETS");
     const auto& homagePresets = getMigratedPresets();
     for (size_t i = 0; i < homagePresets.size(); ++i) {
         mPresetComboBox.addItem(homagePresets[i].name, static_cast<int>(6 + i));

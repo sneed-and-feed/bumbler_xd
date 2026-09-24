@@ -138,7 +138,7 @@ void LCDGraphDisplay::paint(juce::Graphics& g) {
         if (mIsLinked) {
             headerStr = "FILTER ENVELOPE [LINKED TO AMP]";
         } else if (std::abs(mEnvAmount) < 0.01f) {
-            headerStr = "FILTER ENVELOPE [AMT: 0% — INACTIVE]";
+            headerStr = "FILTER ENVELOPE [AMT: 0% - INACTIVE]";
         } else {
             headerStr = juce::String::formatted("FILTER ENVELOPE [AMT: %+.0f%%]", static_cast<double>(mEnvAmount * 100.0f));
         }
