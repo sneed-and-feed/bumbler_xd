@@ -13,7 +13,7 @@ if(APPLE)
     endif()
 endif()
 
-project(BUMBLER_XD_PROJECT VERSION 1.0.5 LANGUAGES C CXX)
+project(BUMBLER_XD_PROJECT VERSION 1.0.6 LANGUAGES C CXX)
 
 # Enforce ISO C++20 standard without compiler extensions
 set(CMAKE_CXX_STANDARD 20)
@@ -149,7 +149,7 @@ endif()
 juce_add_plugin(BumblerXD
     COMPANY_NAME "Sneed's Feed & Seed Ltd."
     BUNDLE_ID "com.sneedandfeed.bumbler_xd"
-    VERSION "1.0.5"
+    VERSION "1.0.6"
     IS_SYNTH TRUE
     NEEDS_MIDI_INPUT TRUE
     NEEDS_MIDI_OUTPUT FALSE
@@ -172,6 +172,8 @@ target_sources(BumblerXD PRIVATE
     source/plugin/parameters/LfoParameters.h
     source/plugin/parameters/CharacterParameters.h
     source/plugin/parameters/PresetParameters.h
+    source/plugin/PresetMigrator.h
+    source/plugin/PresetMigrator.cpp
     source/plugin/PluginProcessor.h
     source/plugin/PluginProcessor.cpp
     source/plugin/PluginEditor.h

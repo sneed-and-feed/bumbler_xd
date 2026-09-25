@@ -941,14 +941,19 @@ def process_single_file(
         return []
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Legacy Wasp & Wasp XT Preset Migration Importer for Bumbler XD",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter
     )
     parser.add_argument(
+        "--gui",
+        action="store_true",
+        help="Launch graphical desktop migration assistant"
+    )
+    parser.add_argument(
         "--input", "-i",
-        required=True,
+        required=False,
         nargs="+",
         help="Path to legacy preset file(s) or directory (.fxp, .fxb, .fst, .flp)"
     )
@@ -979,8 +984,37 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="Parse input files and report statistics without writing output files"
     )
+    return parser
 
-    args = parser.parse_args(argv)
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    # If invoked directly without arguments in an interactive terminal / GUI environment, launch GUI
+    if argv is None:
+        effective_argv = sys.argv[1:]
+        is_interactive = bool(sys.stdin and hasattr(sys.stdin, "isatty") and sys.stdin.isatty())
+        if len(effective_argv) == 0 and is_interactive:
+            try:
+                from scripts.migrator_gui import launch_gui
+            except ImportError:
+                from migrator_gui import launch_gui
+            launch_gui()
+            return 0
+    else:
+        effective_argv = list(argv)
+
+    parser = build_arg_parser()
+    args = parser.parse_args(effective_argv)
+
+    if args.gui:
+        try:
+            from scripts.migrator_gui import launch_gui
+        except ImportError:
+            from migrator_gui import launch_gui
+        launch_gui(initial_inputs=args.input)
+        return 0
+
+    if not args.input:
+        parser.error("the following arguments are required: --input/-i")
 
     input_paths = [Path(p) for p in args.input]
     output_dir = Path(args.output_dir)

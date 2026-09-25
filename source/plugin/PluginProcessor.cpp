@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "PresetMigrator.h"
 #include "parameters/MigratedPresets.h"
 
 namespace bumbler {
@@ -212,6 +213,24 @@ void BumblerAudioProcessor::loadHomagePreset(int index) {
 
     mCurrentProgramIndex.store(5 + index, std::memory_order_relaxed);
     applyParameterSnapshot(presets[static_cast<size_t>(index)].params);
+}
+
+void BumblerAudioProcessor::loadMigratedSnapshot(const ParameterSnapshot& p) {
+    mCurrentProgramIndex.store(-1, std::memory_order_relaxed);
+    applyParameterSnapshot(p);
+}
+
+bool BumblerAudioProcessor::loadXmlPresetFile(const juce::File& xmlFile) {
+    if (!xmlFile.existsAsFile())
+        return false;
+
+    juce::String xml = xmlFile.loadFileAsString();
+    auto presets = PresetMigrator::parseXml(xml, xmlFile.getFullPathName());
+    if (!presets.empty()) {
+        loadMigratedSnapshot(presets[0].snapshot);
+        return true;
+    }
+    return false;
 }
 
 // ============================================================================

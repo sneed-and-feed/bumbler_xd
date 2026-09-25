@@ -270,3 +270,29 @@ add_test(NAME ChallengerM62AdversarialStatePresetsGui COMMAND bumbler_challenger
 bumbler_add_test_target(bumbler_golden_vector_tests golden_vector_tests.cpp GoldenVectorTests)
 target_include_directories(bumbler_golden_vector_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../source/plugin)
 
+# 23. Preset Migrator C++ Verification Suite
+add_executable(bumbler_preset_migrator_cpp_tests
+    preset_migrator_cpp_tests.cpp
+    ../source/plugin/PresetMigrator.cpp
+)
+target_include_directories(bumbler_preset_migrator_cpp_tests PRIVATE
+    ${TEST_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../source/plugin
+)
+if(MSVC)
+    target_compile_definitions(bumbler_preset_migrator_cpp_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(bumbler_preset_migrator_cpp_tests PRIVATE /utf-8 /W4 /O2 /fp:precise)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64|x86_64|x64")
+        target_compile_options(bumbler_preset_migrator_cpp_tests PRIVATE /arch:AVX2)
+    endif()
+else()
+    target_compile_options(bumbler_preset_migrator_cpp_tests PRIVATE -Wall -Wextra -O3)
+endif()
+target_link_libraries(bumbler_preset_migrator_cpp_tests PRIVATE
+    bumbler_dsp_core
+    juce::juce_core
+    juce::juce_audio_processors
+    juce::juce_gui_basics
+)
+add_test(NAME PresetMigratorCppTests COMMAND bumbler_preset_migrator_cpp_tests)
+

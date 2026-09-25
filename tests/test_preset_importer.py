@@ -374,5 +374,30 @@ class TestEndToEndWorkflow(unittest.TestCase):
             self.assertEqual(len(root.findall("PARAM")), 55)
 
 
+class TestMigratorGUIAndLauncher(unittest.TestCase):
+    """Verifies that desktop GUI migrator and launcher script are properly configured."""
+
+    def test_migrator_gui_module_importable(self):
+        """scripts.migrator_gui must import cleanly without syntax or packaging errors."""
+        import scripts.migrator_gui as migrator_gui
+        self.assertTrue(hasattr(migrator_gui, "MigratorApp"))
+        self.assertIn("Auto-detect", migrator_gui.CATEGORIES)
+        self.assertEqual(migrator_gui.ACCENT_YELLOW, "#e5a912")
+
+    def test_windows_batch_launcher_exists(self):
+        """MigratePresets.bat must exist in project root and reference scripts/migrator_gui.py."""
+        bat_file = PROJECT_ROOT / "MigratePresets.bat"
+        self.assertTrue(bat_file.exists(), "MigratePresets.bat missing in root")
+        bat_content = bat_file.read_text(encoding="utf-8")
+        self.assertIn("migrator_gui.py", bat_content)
+
+    def test_cli_gui_flag_registered(self):
+        """import_wasp_presets.py must recognize the --gui flag."""
+        from scripts.import_wasp_presets import build_arg_parser
+        parser = build_arg_parser()
+        args = parser.parse_args(["--gui"])
+        self.assertTrue(args.gui)
+
+
 if __name__ == "__main__":
     unittest.main()

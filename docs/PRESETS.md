@@ -113,10 +113,27 @@ To have presets appear automatically in host preset browsers, copy the preset fo
 
 ---
 
-## 5. Legacy Preset Migration
+## 5. Legacy Preset Migration & Musician QOL Workflows
 
-To migrate legacy patches from the discontinued Wasp and Wasp XT plugins (`.fxp`, `.fxb`, `.fst`, `.flp`), use the automated migration importer:
+Bumbler XD provides multiple effortless ways to migrate legacy patches from the discontinued Wasp and Wasp XT plugins (`.fxp`, `.fxb`, `.fst`, `.flp`) into modern APVTS presets:
 
+### Method 1: Instant In-Plugin Drag-and-Drop (Recommended for DAWs)
+1. Open Bumbler XD in your DAW or Standalone.
+2. Drag any legacy preset file (`.fxp`, `.fxb`, `.fst`, `.flp`, or `.xml`) or an entire preset folder from your file manager directly onto the plugin window.
+3. Bumbler XD displays an active drop zone, converts the file on-the-fly, saves it to `%USERPROFILE%\Documents\Bumbler XD\Presets\Migrated\`, updates the preset dropdown under **MIGRATED & USER PRESETS**, and immediately loads the sound so you can play it on your keyboard!
+
+### Method 2: In-Plugin "MIGRATE..." Header Button
+1. Click the **`MIGRATE...`** button in the plugin header next to the preset dropdown.
+2. Choose **"Migrate Preset File(s)..."** or **"Migrate Entire Folder of Presets..."**.
+3. Select your files; Bumbler XD imports and loads them automatically.
+
+### Method 3: Desktop Graphical Migrator Tool (Batch Conversion)
+For musicians migrating large sound libraries without launching a DAW:
+- **Windows**: Double-click **`MigratePresets.bat`** in the Bumbler XD folder.
+- **Cross-Platform**: Run `python scripts/migrator_gui.py` or `python scripts/import_wasp_presets.py --gui`.
+- Provides an intuitive dark-themed GUI with file/folder selection, category auto-detection, a live conversion log, and an "Open Output Folder" shortcut.
+
+### Method 4: Automated CLI Migration Tool
 ```bash
 python scripts/import_wasp_presets.py --input "path/to/legacy_patches" --output-dir "presets/migrated"
 ```

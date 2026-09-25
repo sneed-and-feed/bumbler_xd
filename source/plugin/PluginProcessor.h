@@ -41,6 +41,8 @@ public:
     void applyParameterSnapshot(const ParameterSnapshot& p);
     void loadPreset(int index);
     void loadHomagePreset(int index);
+    void loadMigratedSnapshot(const ParameterSnapshot& p);
+    bool loadXmlPresetFile(const juce::File& xmlFile);
 
     // DAW State Recall
     void getStateInformation(juce::MemoryBlock& destData) override;

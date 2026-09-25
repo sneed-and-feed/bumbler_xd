@@ -7,9 +7,9 @@ release_dir = os.path.join(root_dir, "releases")
 build_dir = os.path.join(root_dir, "build", "BumblerXD_artefacts", "Release")
 
 os.makedirs(release_dir, exist_ok=True)
-version = "1.0.5"
+version = "1.0.6"
 
-# 1. Package Windows-x64 full zip (Standalone + VST3 + docs)
+# 1. Package Windows-x64 full zip (Standalone + VST3 + docs + migrator)
 zip_path = os.path.join(release_dir, f"BUMBLER_XD-v{version}-Windows-x64.zip")
 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
     vst3_dir = os.path.join(build_dir, "VST3", "Bumbler XD.vst3")
@@ -21,6 +21,12 @@ with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
     standalone_file = os.path.join(build_dir, "Standalone", "Bumbler XD.exe")
     if os.path.exists(standalone_file):
         zf.write(standalone_file, "Bumbler XD.exe")
+    if os.path.exists(os.path.join(root_dir, "MigratePresets.bat")):
+        zf.write(os.path.join(root_dir, "MigratePresets.bat"), "MigratePresets.bat")
+    if os.path.exists(os.path.join(root_dir, "scripts", "migrator_gui.py")):
+        zf.write(os.path.join(root_dir, "scripts", "migrator_gui.py"), "scripts/migrator_gui.py")
+    if os.path.exists(os.path.join(root_dir, "scripts", "import_wasp_presets.py")):
+        zf.write(os.path.join(root_dir, "scripts", "import_wasp_presets.py"), "scripts/import_wasp_presets.py")
     if os.path.exists(os.path.join(root_dir, "README.md")):
         zf.write(os.path.join(root_dir, "README.md"), "README.md")
     if os.path.exists(os.path.join(root_dir, "LICENSE")):

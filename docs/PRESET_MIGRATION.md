@@ -225,14 +225,42 @@ If the input is already signed negative, it is treated as a pre-scaled bipolar q
 
 ---
 
-## 5. CLI Tooling & Usage Workflows
+## 5. Migration Workflows & Tooling Ecosystem
 
-### 5.1 Installation & Dependencies
-The migration tool [`scripts/import_wasp_presets.py`](../scripts/import_wasp_presets.py) is implemented using Python 3.8+ standard libraries (`struct`, `xml.etree.ElementTree`, `pathlib`, `argparse`). It requires zero third-party packages or virtual environment activation.
+Bumbler XD provides a comprehensive four-tier migration ecosystem designed for both DAW producers and batch sound designers:
 
-### 5.2 CLI Command Flags
+### 5.1 Native In-Plugin Drag-and-Drop (DAW Real-Time Workflow)
+The most direct workflow for musicians working in DAWs (Ableton Live, FL Studio, Reaper, Cubase, Logic Pro, Studio One, Bitwig) or Bumbler XD Standalone:
+1. Drag any legacy `.fxp`, `.fxb`, `.fst`, `.flp`, or `.xml` file (or multiple files, or an entire folder) from Windows Explorer / macOS Finder directly into the Bumbler XD plugin window.
+2. The UI renders an active drop target overlay with a glowing Wasp-yellow dashed outline.
+3. On release, the native C++20 `PresetMigrator` engine instantly parses the binary format, converts all 55 parameters, saves the patch to `%USERPROFILE%\Documents\Bumbler XD\Presets\Migrated\`, registers it in the dropdown menu under **MIGRATED & USER PRESETS**, and immediately loads the sound into the synth with visual confirmation on the vector LCD display and a floating status toast notification.
+
+### 5.2 In-Plugin "MIGRATE..." Header Button
+1. Click the **`MIGRATE...`** button located next to the PRESET dropdown in the top control panel.
+2. Select **"Migrate Preset File(s)..."** to pick one or more `.fxp`, `.fxb`, `.fst`, `.flp`, or `.xml` files via native file chooser.
+3. Select **"Migrate Entire Folder of Presets..."** to recursively convert a folder of soundbanks.
+4. Select **"Open Migrated Presets Folder in Explorer"** to reveal your user preset library.
+
+### 5.3 Desktop Graphical Migrator Tool (`scripts/migrator_gui.py` / `MigratePresets.bat`)
+For musicians wishing to convert hundreds of legacy presets without opening a DAW:
+- **One-Click Windows Launcher**: Double-click `MigratePresets.bat` in the project root.
+- **Python Launcher**: Run `python scripts/migrator_gui.py` (or `python scripts/import_wasp_presets.py --gui`).
+- **Features**:
+  - Dark synth-styled GUI matching Bumbler XD hardware.
+  - Multi-file and folder browse pickers.
+  - Automatic preset category classification (Bass, Lead, Pad, Pluck, Percussion, FX) or manual override.
+  - Live progress bar and detailed conversion log console.
+  - "Open Output Folder" button to view converted `.xml` patches in Explorer.
+  - Zero external pip packages required (runs purely on standard Python `tkinter`).
+
+### 5.4 CLI Batch Migration Tool (`scripts/import_wasp_presets.py`)
+
+#### Installation & Dependencies
+The CLI migration tool [`scripts/import_wasp_presets.py`](../scripts/import_wasp_presets.py) is implemented using Python 3.8+ standard libraries (`struct`, `xml.etree.ElementTree`, `pathlib`, `argparse`). It requires zero third-party packages or virtual environment activation.
+
+#### CLI Command Flags
 ```text
-python scripts/import_wasp_presets.py [-h] --input INPUT [INPUT ...]
+python scripts/import_wasp_presets.py [-h] [--gui] --input INPUT [INPUT ...]
                                      [--output-dir OUTPUT_DIR]
                                      [--export-cpp [EXPORT_CPP]]
                                      [--category CATEGORY]
@@ -240,6 +268,7 @@ python scripts/import_wasp_presets.py [-h] --input INPUT [INPUT ...]
                                      [--dry-run]
 ```
 
+- `--gui`: Launches the graphical desktop migrator tool.
 - `--input`, `-i`: One or more paths to files (`.fxp`, `.fxb`, `.fst`, `.flp`) or directories. Directories are scanned recursively.
 - `--output-dir`, `-o`: Directory where XML preset files are written (defaults to `presets/migrated/`). Presets are organized into category subfolders.
 - `--export-cpp`, `-c`: Optional path to output a compiled C++ `PresetDefinition` array header.

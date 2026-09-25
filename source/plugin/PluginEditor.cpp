@@ -66,6 +66,9 @@ BumblerAudioProcessorEditor::~BumblerAudioProcessorEditor() {
     apvts.removeParameterListener("ampSustain", this);
     apvts.removeParameterListener("ampRelease", this);
 
+    stopTimer();
+    mFileChooser.reset();
+
     // 2. Explicitly tear down all attachments BEFORE controls are destroyed (RAII invariant)
     mOscMixAttachment.reset();
     for (auto& k : mKnobs)   k->attachment.reset();
@@ -407,12 +410,8 @@ void BumblerAudioProcessorEditor::showFaderContextMenu(juce::Point<int> screenPo
         });
 }
 
-void BumblerAudioProcessorEditor::setupUI() {
-    // Presets ComboBox
-    mPresetLabel.setText("PRESET:", juce::dontSendNotification);
-    mPresetLabel.setFont(juce::FontOptions(11.0f, juce::Font::bold));
-    mPresetLabel.setColour(juce::Label::textColourId, juce::Colour(BumblerColours::WaspYellow));
-    addAndMakeVisible(mPresetLabel);
+void BumblerAudioProcessorEditor::refreshPresetMenu() {
+    mPresetComboBox.clear(juce::dontSendNotification);
 
     mPresetComboBox.addSectionHeading("FACTORY PRESETS");
     for (int i = 0; i < mProcessor.getNumPrograms(); ++i) {
@@ -425,10 +424,188 @@ void BumblerAudioProcessorEditor::setupUI() {
         mPresetComboBox.addItem(homagePresets[i].name, static_cast<int>(6 + i));
     }
 
+    mUserPresets.clear();
+    auto userFiles = PresetMigrator::scanUserPresets();
+    if (!userFiles.isEmpty()) {
+        mPresetComboBox.addSectionHeading("MIGRATED & USER PRESETS");
+        int itemId = 21;
+        for (const auto& f : userFiles) {
+            UserPresetItem item;
+            item.file = f;
+            item.name = f.getFileNameWithoutExtension();
+            item.category = f.getParentDirectory().getFileName();
+            mUserPresets.push_back(item);
+
+            juce::String label = item.name;
+            if (item.category.isNotEmpty() && item.category != "Migrated") {
+                label = "[" + item.category + "] " + item.name;
+            }
+            mPresetComboBox.addItem(label, itemId++);
+        }
+    }
+
     const int curProg = mProcessor.getCurrentProgram();
     if (curProg >= 0 && curProg < 20) {
         mPresetComboBox.setSelectedId(curProg + 1, juce::dontSendNotification);
     }
+}
+
+void BumblerAudioProcessorEditor::showStatusToast(const juce::String& message, bool isError) {
+    mToastMessage = message;
+    mToastIsError = isError;
+    mToastAlpha = 1.0f;
+    mToastCountdown = 35; // ~3.5 seconds
+    startTimer(100);
+    repaint();
+}
+
+void BumblerAudioProcessorEditor::timerCallback() {
+    if (mToastCountdown > 0) {
+        mToastCountdown--;
+    } else if (mToastAlpha > 0.0f) {
+        mToastAlpha -= 0.08f;
+        if (mToastAlpha <= 0.0f) {
+            mToastAlpha = 0.0f;
+            stopTimer();
+        }
+        repaint();
+    }
+}
+
+void BumblerAudioProcessorEditor::migrateFilesAndLoad(const juce::Array<juce::File>& files) {
+    auto migrated = PresetMigrator::migrateFiles(files);
+    if (migrated.empty()) {
+        showStatusToast("No valid legacy Wasp (.fxp, .fxb, .fst, .flp) or XML presets found.", true);
+        return;
+    }
+
+    for (const auto& patch : migrated) {
+        PresetMigrator::saveToUserLibrary(patch);
+    }
+
+    mProcessor.loadMigratedSnapshot(migrated.front().snapshot);
+    updateLcdDisplays();
+
+    refreshPresetMenu();
+
+    for (size_t i = 0; i < mUserPresets.size(); ++i) {
+        if (mUserPresets[i].name == migrated.front().name) {
+            mPresetComboBox.setSelectedId(static_cast<int>(21 + i), juce::dontSendNotification);
+            break;
+        }
+    }
+
+    juce::String toastMsg;
+    if (migrated.size() == 1) {
+        toastMsg = "Migrated & Loaded: \"" + migrated.front().name + "\" (" + migrated.front().sourceFormat + ")";
+    } else {
+        toastMsg = juce::String::formatted("Migrated %d presets! Loaded: \"%s\"",
+                                           static_cast<int>(migrated.size()),
+                                           migrated.front().name.toRawUTF8());
+    }
+    showStatusToast(toastMsg, false);
+}
+
+void BumblerAudioProcessorEditor::showMigrateMenu(juce::Point<int> screenPos) {
+    juce::PopupMenu menu;
+    menu.addSectionHeader("PRESET MIGRATOR");
+    menu.addSeparator();
+    menu.addItem(1, "Migrate Preset File(s)... (.fxp, .fxb, .fst, .flp, .xml)");
+    menu.addItem(2, "Migrate Entire Folder of Presets...");
+    menu.addSeparator();
+    menu.addItem(3, "Open Migrated Presets Folder in Explorer");
+
+    juce::Component::SafePointer<BumblerAudioProcessorEditor> safeThis(this);
+    menu.showMenuAsync(
+        juce::PopupMenu::Options()
+            .withTargetScreenArea(juce::Rectangle<int>(screenPos.x, screenPos.y, 1, 1))
+            .withTargetComponent(&mMigrateButton)
+            .withParentComponent(this),
+        [safeThis](int result) {
+            if (safeThis == nullptr || result <= 0) return;
+
+            if (result == 1) {
+                safeThis->mFileChooser = std::make_unique<juce::FileChooser>(
+                    "Select Legacy Wasp Presets to Migrate",
+                    PresetMigrator::getUserPresetDirectory(),
+                    "*.fxp;*.fxb;*.fst;*.flp;*.xml");
+
+                const int flags = juce::FileBrowserComponent::openMode
+                                | juce::FileBrowserComponent::canSelectFiles
+                                | juce::FileBrowserComponent::canSelectMultipleItems;
+
+                safeThis->mFileChooser->launchAsync(flags, [safeThis](const juce::FileChooser& fc) {
+                    if (safeThis != nullptr) {
+                        auto chosen = fc.getResults();
+                        if (!chosen.isEmpty()) {
+                            safeThis->migrateFilesAndLoad(chosen);
+                        }
+                    }
+                });
+            } else if (result == 2) {
+                safeThis->mFileChooser = std::make_unique<juce::FileChooser>(
+                    "Select Folder Containing Legacy Presets to Migrate",
+                    PresetMigrator::getUserPresetDirectory());
+
+                const int flags = juce::FileBrowserComponent::openMode
+                                | juce::FileBrowserComponent::canSelectDirectories;
+
+                safeThis->mFileChooser->launchAsync(flags, [safeThis](const juce::FileChooser& fc) {
+                    if (safeThis != nullptr) {
+                        auto chosen = fc.getResults();
+                        if (!chosen.isEmpty()) {
+                            safeThis->migrateFilesAndLoad(chosen);
+                        }
+                    }
+                });
+            } else if (result == 3) {
+                PresetMigrator::getUserPresetDirectory().startAsProcess();
+            }
+        });
+}
+
+bool BumblerAudioProcessorEditor::isInterestedInFileDrag(const juce::StringArray& files) {
+    for (const auto& file : files) {
+        juce::File f(file);
+        if (f.isDirectory()) return true;
+        juce::String ext = f.getFileExtension().toLowerCase();
+        if (ext == ".fxp" || ext == ".fxb" || ext == ".fst" || ext == ".flp" || ext == ".xml") {
+            return true;
+        }
+    }
+    return false;
+}
+
+void BumblerAudioProcessorEditor::fileDragEnter(const juce::StringArray&, int, int) {
+    mIsDraggingFiles = true;
+    repaint();
+}
+
+void BumblerAudioProcessorEditor::fileDragMove(const juce::StringArray&, int, int) {}
+
+void BumblerAudioProcessorEditor::fileDragExit(const juce::StringArray&) {
+    mIsDraggingFiles = false;
+    repaint();
+}
+
+void BumblerAudioProcessorEditor::filesDropped(const juce::StringArray& files, int, int) {
+    mIsDraggingFiles = false;
+    repaint();
+
+    juce::Array<juce::File> fileList;
+    for (const auto& fStr : files) {
+        fileList.add(juce::File(fStr));
+    }
+    migrateFilesAndLoad(fileList);
+}
+
+void BumblerAudioProcessorEditor::setupUI() {
+    // Presets ComboBox & Label
+    mPresetLabel.setText("PRESET:", juce::dontSendNotification);
+    mPresetLabel.setFont(juce::FontOptions(11.0f, juce::Font::bold));
+    mPresetLabel.setColour(juce::Label::textColourId, juce::Colour(BumblerColours::WaspYellow));
+    addAndMakeVisible(mPresetLabel);
+
     mPresetComboBox.onChange = [this]() {
         const int selectedId = mPresetComboBox.getSelectedId();
         if (selectedId >= 1 && selectedId <= 5) {
@@ -437,9 +614,30 @@ void BumblerAudioProcessorEditor::setupUI() {
         } else if (selectedId >= 6 && selectedId <= 20) {
             mProcessor.loadHomagePreset(selectedId - 6);
             updateLcdDisplays();
+        } else if (selectedId >= 21) {
+            size_t uIdx = static_cast<size_t>(selectedId - 21);
+            if (uIdx < mUserPresets.size()) {
+                if (mProcessor.loadXmlPresetFile(mUserPresets[uIdx].file)) {
+                    updateLcdDisplays();
+                    showStatusToast("Loaded preset: " + mUserPresets[uIdx].name, false);
+                }
+            }
         }
     };
     addAndMakeVisible(mPresetComboBox);
+
+    // Migrate Button
+    mMigrateButton.setButtonText("MIGRATE...");
+    mMigrateButton.setTooltip("Migrate legacy Wasp / Wasp XT presets (.fxp, .fxb, .fst, .flp, .xml)");
+    mMigrateButton.setColour(juce::TextButton::buttonColourId, juce::Colour(BumblerColours::ChassisPanel));
+    mMigrateButton.setColour(juce::TextButton::textColourOffId, juce::Colour(BumblerColours::WaspYellow));
+    mMigrateButton.setColour(juce::TextButton::textColourOnId, juce::Colour(BumblerColours::SilkWhite));
+    mMigrateButton.onClick = [this]() {
+        showMigrateMenu(mMigrateButton.getScreenBounds().getBottomLeft());
+    };
+    addAndMakeVisible(mMigrateButton);
+
+    refreshPresetMenu();
 
     // 1. Oscillators Section (14 params)
     addCombo(ParamIDs::osc1Waveform, "OSC 1", getOscWaveformChoices());
@@ -578,31 +776,85 @@ void BumblerAudioProcessorEditor::paint(juce::Graphics& g) {
     drawDeck({ pad * 2 + leftBotW, headerH + topDeckH + pad, rightBotW, botDeckH }, "ENVELOPES & VECTOR LCD");
 }
 
+void BumblerAudioProcessorEditor::paintOverChildren(juce::Graphics& g) {
+    if (mIsDraggingFiles) {
+        g.setColour(juce::Colour(0xe010141a));
+        g.fillRoundedRectangle(getLocalBounds().toFloat().reduced(6.0f), 6.0f);
+
+        g.setColour(juce::Colour(BumblerColours::WaspYellow));
+        const float dashPattern[2] = { 8.0f, 6.0f };
+        juce::Path outline;
+        outline.addRoundedRectangle(getLocalBounds().toFloat().reduced(12.0f), 8.0f);
+        juce::Path dashedOutline;
+        juce::PathStrokeType(2.5f).createDashedStroke(dashedOutline, outline, dashPattern, 2);
+        g.fillPath(dashedOutline);
+
+        g.setFont(juce::FontOptions(22.0f, juce::Font::bold));
+        g.setColour(juce::Colour(BumblerColours::WaspYellow));
+        g.drawText("DROP LEGACY WASP PRESETS TO MIGRATE",
+                   getLocalBounds().reduced(20, 0).withHeight(getHeight() - 40),
+                   juce::Justification::centred);
+
+        g.setFont(juce::FontOptions(13.0f, juce::Font::plain));
+        g.setColour(juce::Colour(BumblerColours::TextMuted));
+        g.drawText("Supports .fxp, .fxb, .fst, .flp, and .xml  --  Automatically converts and loads instantly",
+                   getLocalBounds().reduced(20, 0).withTrimmedTop(getHeight() / 2 + 20),
+                   juce::Justification::centredTop);
+    }
+
+    if (mToastAlpha > 0.0f) {
+        const int toastW = std::min(560, getWidth() - 40);
+        const auto toastBounds = juce::Rectangle<int>(getWidth() / 2 - toastW / 2, 14, toastW, 30);
+
+        // Toast drop shadow
+        g.setColour(juce::Colours::black.withAlpha(0.6f * mToastAlpha));
+        g.fillRoundedRectangle(toastBounds.toFloat().expanded(1.0f).translated(0.0f, 2.0f), 15.0f);
+
+        // Toast pill background
+        g.setColour(juce::Colour(0xf0161b22).withAlpha(0.96f * mToastAlpha));
+        g.fillRoundedRectangle(toastBounds.toFloat(), 15.0f);
+
+        // Toast border
+        g.setColour(mToastIsError ? juce::Colours::crimson.withAlpha(mToastAlpha)
+                                  : juce::Colour(BumblerColours::WaspYellow).withAlpha(mToastAlpha));
+        g.drawRoundedRectangle(toastBounds.toFloat(), 15.0f, 1.5f);
+
+        // Toast text
+        g.setColour(mToastIsError ? juce::Colour(0xffff9999).withAlpha(mToastAlpha)
+                                  : juce::Colour(BumblerColours::SilkWhite).withAlpha(mToastAlpha));
+        g.setFont(juce::FontOptions(11.5f, juce::Font::bold));
+        g.drawText((mToastIsError ? "[!] " : "[OK] ") + mToastMessage,
+                   toastBounds.reduced(14, 0),
+                   juce::Justification::centred);
+    }
+}
+
 void BumblerAudioProcessorEditor::resized() {
     const int totalW = getWidth();
     const int totalH = getHeight();
     const int pad = 10;
 
     // Header Controls Layout (Y = 10 to 60)
-    mPresetLabel.setBounds(185, 24, 60, 22);
-    mPresetComboBox.setBounds(248, 24, 145, 22);
+    mPresetLabel.setBounds(180, 24, 52, 22);
+    mPresetComboBox.setBounds(234, 24, 130, 22);
+    mMigrateButton.setBounds(368, 23, 72, 24);
 
-    if (auto* b = findButton("driveEnabled")) b->button.setBounds(400, 23, 75, 24);
+    if (auto* b = findButton("driveEnabled")) b->button.setBounds(446, 23, 72, 24);
     if (auto* k = findKnob("driveAmount")) {
-        k->slider.setBounds(480, 14, 38, 38);
-        k->nameLabel.setBounds(474, 48, 50, 12);
+        k->slider.setBounds(524, 14, 38, 38);
+        k->nameLabel.setBounds(518, 48, 50, 12);
     }
     if (auto* k = findKnob("driveTone")) {
-        k->slider.setBounds(535, 14, 38, 38);
-        k->nameLabel.setBounds(529, 48, 50, 12);
+        k->slider.setBounds(576, 14, 38, 38);
+        k->nameLabel.setBounds(570, 48, 50, 12);
     }
 
-    if (auto* b = findButton("dualMode"))   b->button.setBounds(595, 23, 70, 24);
-    if (auto* b = findButton("analogMode")) b->button.setBounds(670, 23, 80, 24);
+    if (auto* b = findButton("dualMode"))   b->button.setBounds(630, 23, 65, 24);
+    if (auto* b = findButton("analogMode")) b->button.setBounds(702, 23, 75, 24);
 
     if (auto* c = findCombo("wNoiseMode")) {
-        c->label.setBounds(760, 14, 60, 14);
-        c->comboBox.setBounds(760, 30, 95, 22);
+        c->label.setBounds(785, 14, 60, 14);
+        c->comboBox.setBounds(785, 30, 95, 22);
     }
 
     if (auto* k = findKnob("masterVolume")) {

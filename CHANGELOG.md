@@ -32,10 +32,36 @@ Bumbler XD maintains strict API and DAW state recall stability commitments acros
 | **v1.0.3** | v1.0.3 (Per-Algorithm Fixtures, Minimal Example, Voice Stealing Proof) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
 | **v1.0.4** | v1.0.4 (Context Menus, Dynamic Filter LCD Telemetry, Release Calibration) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
 | **v1.0.5** | v1.0.5 (Legacy Preset Importer, 15 Homage Presets, Docs Refactor) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
+| **v1.0.6** | v1.0.6 (QOL Drag-and-Drop Preset Migrator & GUI) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
 
 ---
 
 ## Release History
+
+## [1.0.6] - 2026-09-25
+
+### Added
+- **Native In-Plugin Drag-and-Drop Preset Migration (`juce::FileDragAndDropTarget`):**
+  - Instant drag-and-drop loading for `.fxp` (VST 2.4 Preset), `.fxb` (VST 2.4 Bank), `.fst` (FL Studio State), `.flp` (FL Studio Project), and `.xml` (Bumbler XD Preset) directly onto the synthesizer interface.
+  - Interactive visual overlay with glowing Wasp-yellow dashed outline indicating active file drop zone.
+  - Automatically loads the patch immediately into the synthesis engine, updates all UI knobs and vector LCD displays, and saves to the user library.
+  - Floating status toast notification displaying migration results and loaded patch title.
+- **In-Plugin "MIGRATE..." Header Control & File Chooser:**
+  - Dedicated `MIGRATE...` button adjacent to the preset dropdown with native file and folder selection dialogs (`juce::FileChooser`).
+  - Menu actions to migrate individual preset files, batch migrate entire directories, or reveal the user preset folder in File Explorer.
+- **Dynamic "MIGRATED & USER PRESETS" Dropdown Section:**
+  - Automatically scans `%USERPROFILE%\Documents\Bumbler XD\Presets\Migrated` and populates user presets into the main preset dropdown with category tags.
+- **Native C++20 Preset Migration Engine (`PresetMigrator.h` / `PresetMigrator.cpp`):**
+  - Pure C++20 / JUCE implementation running with zero external dependencies and zero requirement for Python on musician machines.
+  - Implements binary parsing for VST 2.4 `CcnK` containers (`FxCk`, `FPCh`, `FxBk`, `FBCh`), FL Studio RIFF containers and raw chunk buffers, and FL Studio `.flp` project event 0xC5 scanners.
+  - Fully conforms to the 55-parameter APVTS blueprint with exact logarithmic cutoff scaling, exponential ADSR curves, and acoustic category auto-classification.
+- **Desktop Graphical Preset Migrator Utility (`scripts/migrator_gui.py`):**
+  - Standalone desktop application with dark synth aesthetic matching Bumbler XD hardware.
+  - Multi-file and recursive folder batch migration with live progress bar and color-coded conversion log.
+  - Zero external pip dependencies (built on standard Python `tkinter`).
+  - `--gui` flag support in `scripts/import_wasp_presets.py`.
+- **One-Click Windows Launcher (`MigratePresets.bat`):**
+  - Double-clickable root batch launcher allowing Windows musicians to launch the graphical migrator tool without touching a terminal.
 
 ## [1.0.5] - 2026-09-23
 
