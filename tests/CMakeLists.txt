@@ -83,6 +83,7 @@ add_executable(bumbler_apvts_state_tests
     apvts_state_tests.cpp
     ../source/plugin/PluginProcessor.cpp
     ../source/plugin/PluginEditor.cpp
+    ../source/plugin/PresetMigrator.cpp
     ../source/ui/BumblerLookAndFeel.cpp
     ../source/ui/LCDGraphDisplay.cpp
     ../source/ui/HorizontalFader.cpp
@@ -120,6 +121,7 @@ add_executable(bumbler_challenger_m5_2_tests
     challenger_m5_2_tests.cpp
     ../source/plugin/PluginProcessor.cpp
     ../source/plugin/PluginEditor.cpp
+    ../source/plugin/PresetMigrator.cpp
     ../source/ui/BumblerLookAndFeel.cpp
     ../source/ui/LCDGraphDisplay.cpp
     ../source/ui/HorizontalFader.cpp
@@ -157,6 +159,7 @@ add_executable(bumbler_challenger_m5_1_tests
     challenger_m5_1_tests.cpp
     ../source/plugin/PluginProcessor.cpp
     ../source/plugin/PluginEditor.cpp
+    ../source/plugin/PresetMigrator.cpp
     ../source/ui/BumblerLookAndFeel.cpp
     ../source/ui/LCDGraphDisplay.cpp
     ../source/ui/HorizontalFader.cpp
@@ -194,6 +197,7 @@ add_executable(bumbler_challenger_m5_remediation_tests
     challenger_m5_remediation_tests.cpp
     ../source/plugin/PluginProcessor.cpp
     ../source/plugin/PluginEditor.cpp
+    ../source/plugin/PresetMigrator.cpp
     ../source/ui/BumblerLookAndFeel.cpp
     ../source/ui/LCDGraphDisplay.cpp
     ../source/ui/HorizontalFader.cpp
@@ -234,6 +238,7 @@ add_executable(bumbler_challenger_m6_2_tests
     challenger_m6_2_tests.cpp
     ../source/plugin/PluginProcessor.cpp
     ../source/plugin/PluginEditor.cpp
+    ../source/plugin/PresetMigrator.cpp
     ../source/ui/BumblerLookAndFeel.cpp
     ../source/ui/LCDGraphDisplay.cpp
     ../source/ui/HorizontalFader.cpp
