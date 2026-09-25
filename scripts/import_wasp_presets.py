@@ -132,6 +132,66 @@ CLASSIC_WASP_PARAM_ORDER: Tuple[str, ...] = (
     "masterVolume",
 )
 
+# 56 native parameters corresponding to Wasp XT Delphi form controls (Tags 0..55)
+NATIVE_WASP_XT_PARAM_ORDER: Tuple[str, ...] = (
+    "osc1Waveform",   # 00: Osc1ShapeSelect (0=Saw, 1=Square, 2=Sine, 3=Noise)
+    "osc1Octave",     # 01: Osc1CoarseWheel
+    "osc1Fine",       # 02: Osc1FineWheel
+    "osc2Waveform",   # 03: Osc2ShapeSelect
+    "osc2Octave",     # 04: Osc2CoarseWheel
+    "osc2Fine",       # 05: Osc2FineWheel
+    "osc3Waveform",   # 06: Osc3ShapeSelect (0=Square, 1=Saw)
+    "osc3Level",      # 07: Osc3AmountWheel
+    "oscMix",         # 08: OscMixSlider
+    "pulseWidth",     # 09: PulseWidthWheel
+    "fmAmount",       # 10: FmAmountWheel
+    "ringModMix",     # 11: RingModBtn (0 or 1)
+    "ampAttack",      # 12: AmpAttackWheel
+    "ampDecay",       # 13: AmpDecayWheel
+    "ampSustain",     # 14: AmpSustainLevelWheel
+    "ampRelease",     # 15: AmpReleaseWheel
+    "filterAttack",   # 16: FiltAttack
+    "filterDecay",    # 17: FiltDecay
+    "filterSustain",  # 18: FiltSustainLevel
+    "filterRelease",  # 19: FiltRelease
+    "filterKbTrack",  # 20: KbTrackWheel
+    "filterMode",     # 21: FilterTypeSelect (0..5)
+    "filterCutoff",   # 22: CutoffWheel
+    "filterResonance",# 23: ResonanceWheel
+    "filterEnvAmount",# 24: EnvAmtWheel
+    "lfo1Waveform",   # 25: LFO1ShapeSelect (0..3)
+    "lfo1Target",     # 26: LFO1DestSelect (0..2)
+    "lfo1Amount",     # 27: LFO1AmountWheel
+    "lfo1Rate",       # 28: LFO1FreqWheel
+    "lfo1Sync",       # 29: LFO1SyncBtn
+    "lfo1KeyReset",   # 30: LFO1ResetBtn
+    "lfo2Waveform",   # 31: LFO2ShapeSelect (0..3)
+    "lfo2Target",     # 32: LFO2DestSelect (0..2)
+    "lfo2Amount",     # 33: LFO2AmountWheel
+    "lfo2Rate",       # 34: LFO2FreqWheel
+    "lfo2Sync",       # 35: LFO2SyncBtn
+    "lfo2KeyReset",   # 36: LFO2ResetBtn
+    "driveEnabled",   # 37: UseDistBtn
+    "driveAmount",    # 38: DistDriveWheel
+    "driveTone",      # 39: DistToneWheel
+    "dualMode",       # 40: DualVoiceBtn
+    "velToFilter",    # 41: VelocityFilterWheel
+    "analogMode",     # 42: AnalogBtn
+    "modAttack",      # 43: ModAttackWheel
+    "modDecay",       # 44: ModDecayWheel
+    "modAmount",      # 45: ModAmountWheel
+    "modDest1",       # 46: ModDest1Btn (Filter Cutoff) -> target 0
+    "modDest2",       # 47: ModDest2Btn (Osc1 Pitch) -> target 1
+    "modDest3",       # 48: ModDest3Btn (Osc2 Pitch) -> target 1
+    "modDest4",       # 49: ModDest4Btn (Pulse Width) -> target 2
+    "masterVolume",   # 50: VolumeWheel
+    "aftertouch",     # 51: AftertouchBtn
+    "lfo1Delay",      # 52: LFO1DelayWheel
+    "lfo2Delay",      # 53: LFO2DelayWheel
+    "velToAmp",       # 54: VelocityAmpWheel
+    "wNoiseMode",     # 55: WhiteNoiseBtn
+)
+
 
 # =============================================================================
 # Mathematical Scaling & Domain Conversion Helpers
@@ -382,6 +442,53 @@ def map_float_list_to_preset(
     return preset
 
 
+def map_native_wasp_floats_to_preset(
+    floats: Sequence[float],
+    preset_name: str,
+    source_format: str,
+    source_file: str,
+    flags: int = 0
+) -> ParsedPreset:
+    """Maps 56 native Wasp XT float parameters (Tags 0..55) + flags to a ParsedPreset."""
+    params: Dict[str, float] = {}
+    for spec in ALL_55_PARAMS:
+        params[spec.id] = spec.default_val
+
+    for i, pid in enumerate(NATIVE_WASP_XT_PARAM_ORDER):
+        if i >= len(floats):
+            break
+        raw_val = floats[i]
+        if pid.startswith("modDest") or pid == "aftertouch":
+            continue
+        params[pid] = map_legacy_param_to_apvts(pid, raw_val)
+
+    # Mod Destination Buttons (Tags 46..49)
+    # 46: ModDest1Btn (Filter Cutoff) -> target 0
+    # 47: ModDest2Btn (Osc1 Pitch)    -> target 1
+    # 48: ModDest3Btn (Osc2 Pitch)    -> target 1
+    # 49: ModDest4Btn (Pulse Width)   -> target 2
+    if len(floats) > 49:
+        if floats[46] >= 0.5:
+            params["modTarget"] = 0.0  # Filter Cutoff
+        elif floats[47] >= 0.5 or floats[48] >= 0.5:
+            params["modTarget"] = 1.0  # Pitch
+        elif floats[49] >= 0.5:
+            params["modTarget"] = 2.0  # Pulse Width
+
+    # Flags: Bit 0 = envLink (AmpCoupleFltBtn)
+    if flags & 0x01:
+        params["envLink"] = 1.0
+
+    preset = ParsedPreset(
+        name=preset_name.strip() or "Migrated Preset",
+        parameters=params,
+        source_format=source_format,
+        source_file=source_file
+    )
+    preset.category = preset.auto_classify_category()
+    return preset
+
+
 def parse_fxp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
     """
     Parses VST 2.4 FXP preset or FXB bank files.
@@ -466,17 +573,129 @@ def parse_fxp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
     return presets
 
 
+def parse_native_wasp_chunk(
+    chunk: bytes,
+    default_name: str = "",
+    filename: str = ""
+) -> List[ParsedPreset]:
+    """
+    Parses a native Wasp / Wasp XT chunk (Delphi FruityPlug or raw float block).
+    Supports:
+      1. Embedded 'CcnK' VST fxp
+      2. Versioned chunk with 56 floats + 1 byte flags (e.g. version 13, 229 bytes)
+      3. Versioned chunk with 41 or 52 floats (older Wasp XT versions, 169 or 213 bytes)
+      4. Raw 55 or 56 float block
+      5. Multi-offset scanning for 32..56 normalized floats in range [-3.5, 3.5]
+      6. Raw byte knobs fallback (0..255)
+    """
+    if len(chunk) < 32:
+        return []
+
+    p_name = default_name.strip() or (Path(filename).stem if filename else "Migrated Preset")
+
+    # 1. Embedded CcnK check
+    ccnk_idx = chunk.find(b"CcnK")
+    if ccnk_idx != -1:
+        try:
+            sub = parse_fxp_data(chunk[ccnk_idx:], filename)
+            if sub:
+                for p in sub:
+                    if not p.name or p.name.startswith("Patch ") or p.name == "Migrated Preset":
+                        p.name = p_name
+                return sub
+        except Exception:
+            pass
+
+    # 2. Native FL Studio Wasp XT chunk (Delphi SaveRestoreState):
+    # 4-byte version (10..13) + 224 bytes (56 floats) + 1 byte flags = 229 bytes
+    if len(chunk) >= 229:
+        version = struct.unpack("<I", chunk[:4])[0]
+        if 1 <= version <= 32:
+            floats = parse_float_block(chunk[4:4 + 224], "<")
+            if len(floats) == 56:
+                flags = chunk[4 + 224]
+                return [map_native_wasp_floats_to_preset(
+                    floats, p_name, f"FL Studio Wasp XT Native (State v{version})", filename, flags
+                )]
+
+    # 3. Native FL Studio older version: 164 bytes (41 floats) or 208 bytes (52 floats)
+    if len(chunk) >= 169:
+        version = struct.unpack("<I", chunk[:4])[0]
+        if 1 <= version <= 32:
+            num_floats = 52 if len(chunk) >= 213 else 41
+            floats = parse_float_block(chunk[4:4 + num_floats * 4], "<")
+            if len(floats) == num_floats:
+                flags = chunk[4 + num_floats * 4] if len(chunk) >= 4 + num_floats * 4 + 1 else 0
+                return [map_native_wasp_floats_to_preset(
+                    floats, p_name, f"FL Studio Wasp XT Native (State v{version})", filename, flags
+                )]
+
+    # 4. Raw 55 or 56 floats at offset 0
+    if len(chunk) >= 55 * 4:
+        floats = parse_float_block(chunk, "<")
+        if not floats:
+            floats = parse_float_block(chunk, ">")
+        if len(floats) >= 55:
+            if len(floats) >= 56:
+                return [map_native_wasp_floats_to_preset(
+                    floats[:56], p_name, "FL Studio FST (Raw Floats)", filename, 0
+                )]
+            else:
+                return [map_float_list_to_preset(
+                    floats[:55], p_name, "FL Studio FST (Raw Floats)", filename, WASP_XT_PARAM_ORDER
+                )]
+
+    # 5. Multi-offset scanning for 32..56 normalized floats in range [-3.5, 3.5]
+    for off in range(0, min(68, len(chunk) - 32 * 4 + 1), 4):
+        count = min(56, (len(chunk) - off) // 4)
+        if count < 32:
+            continue
+        try:
+            cand = list(struct.unpack(f"<{count}f", chunk[off:off + count * 4]))
+            valid_cnt = sum(1 for f in cand if math.isfinite(f) and -3.5 <= f <= 3.5)
+            if valid_cnt >= (count * 85) // 100:
+                if len(cand) >= 56:
+                    return [map_native_wasp_floats_to_preset(
+                        cand[:56], p_name, "FL Studio FST (Scanned Block)", filename, 0
+                    )]
+                else:
+                    return [map_float_list_to_preset(
+                        cand, p_name, "FL Studio FST (Scanned Block)", filename,
+                        CLASSIC_WASP_PARAM_ORDER if len(cand) <= 36 else WASP_XT_PARAM_ORDER
+                    )]
+        except struct.error:
+            pass
+
+    # 6. Raw byte knob fallback (0..255)
+    if len(chunk) >= 32:
+        count = min(len(chunk), 56)
+        byte_floats = [b / 255.0 for b in chunk[:count]]
+        if len(byte_floats) >= 56:
+            return [map_native_wasp_floats_to_preset(
+                byte_floats, p_name, "FL Studio FST (Raw Bytes)", filename, 0
+            )]
+        else:
+            return [map_float_list_to_preset(
+                byte_floats, p_name, "FL Studio FST (Raw Bytes)", filename,
+                CLASSIC_WASP_PARAM_ORDER if len(byte_floats) <= 36 else WASP_XT_PARAM_ORDER
+            )]
+
+    return []
+
+
 def parse_fst_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
     """
     Parses FL Studio State (.fst) files.
     Supports:
-      - RIFF containers with subchunks ('FS_G', 'FS_C', 'data', 'plug', 'CcnK')
-      - IFF containers ('FORM')
-      - Embedded FLhd/FLdt event streams
-      - Embedded VST 2.4 chunks
+      - Direct embedded VST CcnK chunks
+      - Embedded FLhd/FLdt event streams (modern FL Studio .fst)
+      - RIFF containers with subchunks ('data', 'plug', 'stat', etc.)
+      - Raw plugin chunks via parse_native_wasp_chunk
     """
     if len(data) < 8:
         raise ValueError("File too small for FST state")
+
+    base_name = Path(filename).stem if filename else "Migrated FST"
 
     # 1. Direct embedded VST CcnK check
     ccnk_idx = data.find(b"CcnK")
@@ -486,52 +705,32 @@ def parse_fst_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
         except Exception:
             pass
 
-    # 2. RIFF Container
-    if data.startswith(b"RIFF"):
-        riff_size = struct.unpack("<I", data[4:8])[0]
-        riff_type = data[8:12]
+    # 2. Embedded FLhd / FLdt Stream
+    flhd_idx = data.find(b"FLhd")
+    if flhd_idx != -1:
+        flp_out = parse_flp_data(data[flhd_idx:], filename)
+        if flp_out:
+            return flp_out
+
+    # 3. RIFF Container
+    if data.startswith(b"RIFF") and len(data) >= 12:
         pos = 12
-        extracted_presets: List[ParsedPreset] = []
         while pos + 8 <= len(data):
-            chunk_id = data[pos:pos + 4]
             chunk_len = struct.unpack("<I", data[pos + 4:pos + 8])[0]
             pos += 8
+            if pos + chunk_len > len(data):
+                break
             chunk_payload = data[pos:pos + chunk_len]
             pos += (chunk_len + 1) & ~1  # 2-byte alignment
 
-            if chunk_id in (b"data", b"plug", b"stat", b"WASP"):
-                # Check for nested CcnK or float block
-                c_idx = chunk_payload.find(b"CcnK")
-                if c_idx != -1:
-                    try:
-                        return parse_fxp_data(chunk_payload[c_idx:], filename)
-                    except Exception:
-                        pass
-                floats = parse_float_block(chunk_payload, "<")
-                if floats:
-                    extracted_presets.append(
-                        map_float_list_to_preset(floats, Path(filename).stem, "FL Studio FST (RIFF)", filename)
-                    )
+            sub = parse_native_wasp_chunk(chunk_payload, base_name, filename)
+            if sub:
+                return sub
 
-        if extracted_presets:
-            return extracted_presets
-
-    # 3. FLhd / FLdt Stream
-    if b"FLhd" in data:
-        flhd_idx = data.find(b"FLhd")
-        return parse_flp_data(data[flhd_idx:], filename)
-
-    # 4. Raw float block fallback
-    floats = parse_float_block(data, "<")
-    if not floats:
-        floats = parse_float_block(data, ">")
-    if floats:
-        return [map_float_list_to_preset(floats, Path(filename).stem, "FL Studio FST (Raw Floats)", filename)]
-
-    # 5. Raw byte block fallback (knob positions 0..255)
-    if len(data) >= 32:
-        floats = [b / 255.0 for b in data[:min(len(data), 55)]]
-        return [map_float_list_to_preset(floats, Path(filename).stem, "FL Studio FST (Raw Bytes)", filename)]
+    # 4. Raw file scan fallback
+    fallback = parse_native_wasp_chunk(data, base_name, filename)
+    if fallback:
+        return fallback
 
     raise ValueError(f"Unable to parse .fst state: unrecognized format in '{filename}'")
 
@@ -555,15 +754,15 @@ def read_varint_from_buffer(buf: bytes, pos: int) -> Tuple[int, int]:
 
 def parse_flp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
     """
-    Parses FL Studio project (.flp) files.
-    Scans for event 0xC5 (FLP_PluginData) on channels identifying as Wasp or Wasp XT.
+    Parses FL Studio project (.flp) files and FLhd-based .fst preset streams.
+    Scans for event 213 (0xD5 PluginID.Data) and event 197 (0xC5 FLP_PluginData)
+    identifying as Wasp or Wasp XT.
     """
     flhd_idx = data.find(b"FLhd")
     if flhd_idx == -1:
         raise ValueError("Invalid FLP: missing 'FLhd' header")
 
     pos = flhd_idx
-    header_magic = data[pos:pos + 4]
     header_len = struct.unpack("<I", data[pos + 4:pos + 8])[0]
     pos += 8 + header_len
 
@@ -572,7 +771,6 @@ def parse_flp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
 
     data_magic = data[pos:pos + 4]
     if data_magic != b"FLdt":
-        # Scan for FLdt
         fldt_idx = data.find(b"FLdt", pos)
         if fldt_idx == -1:
             raise ValueError("Invalid FLP: missing 'FLdt' data chunk")
@@ -586,13 +784,16 @@ def parse_flp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
     current_chan_name = ""
     current_plugin_name = ""
     chan_counter = 0
+    is_fst_file = filename.lower().endswith(".fst")
+    file_stem = Path(filename).stem if filename else ""
 
     while pos < end_pos:
         cmd = data[pos]
         pos += 1
 
         if cmd < 64:  # 1-byte event
-            val = data[pos]
+            if pos >= end_pos:
+                break
             pos += 1
             if cmd == 0:  # FLP_NewChannel
                 chan_counter += 1
@@ -607,51 +808,57 @@ def parse_flp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
 
         else:  # >= 192: Variable length chunk
             chunk_len, pos = read_varint_from_buffer(data, pos)
+            if pos + chunk_len > end_pos:
+                break
             chunk_bytes = data[pos:pos + chunk_len]
             pos += chunk_len
 
-            # 0xC4 = FLP_PluginName / FLP_ChanName
-            if cmd in (196, 212):  # 0xC4 or similar string events
+            # String events:
+            # 192 = Channel Title / Name
+            # 196 = Plugin Name / Sample Path
+            # 201 = PluginID.InternalName (e.g. "Wasp XT", "Wasp", "Fruity Wrapper")
+            # 203 = PluginID.Name (e.g. "Wasp XT")
+            if cmd in (192, 196, 201, 203):
                 try:
                     str_val = chunk_bytes.split(b"\x00")[0].decode("utf-8", errors="replace").strip()
                     if str_val:
-                        if not current_chan_name or current_chan_name.startswith("Channel "):
+                        if cmd == 192 and (not current_chan_name or current_chan_name.startswith("Channel ")):
                             current_chan_name = str_val
-                        if "wasp" in str_val.lower():
+                        if cmd in (196, 201, 203):
                             current_plugin_name = str_val
                 except Exception:
                     pass
 
-            # 0xC5 (197) = FLP_PluginData
-            elif cmd == 197:
+            # Plugin Data events:
+            # 213 (0xD5) = PluginID.Data (Modern FL Studio 6..24+ native plugin state)
+            # 197 (0xC5) = FLP_PluginData (Ancient FL Studio)
+            # 212 = Wrapper data
+            elif cmd in (213, 197, 212):
                 is_wasp = (
                     "wasp" in current_plugin_name.lower() or
                     "wasp" in current_chan_name.lower() or
+                    "wasp" in filename.lower() or
+                    is_fst_file or
                     b"Wasp" in chunk_bytes or
                     b"CcnK" in chunk_bytes
                 )
-                if is_wasp or len(chunk_bytes) in (55 * 4, 32 * 4, 55, 32):
-                    # Attempt extraction
-                    c_idx = chunk_bytes.find(b"CcnK")
-                    if c_idx != -1:
-                        try:
-                            sub_presets = parse_fxp_data(chunk_bytes[c_idx:], filename)
-                            presets.extend(sub_presets)
-                            continue
-                        except Exception:
-                            pass
 
-                    floats = parse_float_block(chunk_bytes, "<")
-                    if not floats:
-                        floats = parse_float_block(chunk_bytes, ">")
-                    if not floats and len(chunk_bytes) >= 32:
-                        floats = [b / 255.0 for b in chunk_bytes[:55]]
+                if is_fst_file and file_stem and not file_stem.startswith("test_") and file_stem.lower() != "migrated fst":
+                    p_name = file_stem
+                elif current_chan_name and not current_chan_name.startswith("Channel "):
+                    p_name = current_chan_name
+                elif current_plugin_name:
+                    p_name = current_plugin_name
+                else:
+                    p_name = f"Wasp_Chan_{chan_counter or 1}"
 
-                    if floats:
-                        p_name = current_chan_name or current_plugin_name or f"Wasp_Channel_{chan_counter}"
-                        presets.append(map_float_list_to_preset(
-                            floats, p_name, "FL Studio FLP Event 0xC5", filename
-                        ))
+                sub = parse_native_wasp_chunk(chunk_bytes, p_name, filename)
+                if sub:
+                    if is_wasp or not filename.lower().endswith(".flp"):
+                        if filename.lower().endswith(".flp"):
+                            for p in sub:
+                                p.source_format = f"FL Studio FLP Event 0x{cmd:02X}"
+                        presets.extend(sub)
 
     return presets
 
@@ -958,6 +1165,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Path to legacy preset file(s) or directory (.fxp, .fxb, .fst, .flp)"
     )
     parser.add_argument(
+        "positional_inputs",
+        nargs="*",
+        help="Optional positional path(s) to legacy preset file(s) or directory"
+    )
+    parser.add_argument(
         "--output-dir", "-o",
         default="presets/migrated",
         help="Destination directory for generated JUCE APVTS XML preset files"
@@ -1005,18 +1217,20 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = build_arg_parser()
     args = parser.parse_args(effective_argv)
 
+    raw_inputs = list(args.input or []) + list(args.positional_inputs or [])
+
     if args.gui:
         try:
             from scripts.migrator_gui import launch_gui
         except ImportError:
             from migrator_gui import launch_gui
-        launch_gui(initial_inputs=args.input)
+        launch_gui(initial_inputs=raw_inputs if raw_inputs else None)
         return 0
 
-    if not args.input:
-        parser.error("the following arguments are required: --input/-i")
+    if not raw_inputs:
+        parser.error("the following arguments are required: --input/-i or positional input paths")
 
-    input_paths = [Path(p) for p in args.input]
+    input_paths = [Path(p) for p in raw_inputs]
     output_dir = Path(args.output_dir)
     export_cpp_path = Path(args.export_cpp) if args.export_cpp else None
 

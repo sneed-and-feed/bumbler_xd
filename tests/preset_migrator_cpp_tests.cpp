@@ -114,11 +114,69 @@ static void testXmlRoundtrip() {
     std::cout << "  -> PASS: XML serialization and deserialization bit-identical." << std::endl;
 }
 
+static void testNativeWaspFstParsing() {
+    std::cout << "[TEST] Running native Wasp XT .fst parsing..." << std::endl;
+
+    // Construct synthetic FLhd/FLdt event stream with event 213 (0xD5) Wasp XT chunk
+    std::vector<uint8_t> buf;
+    const uint8_t flhd[] = {
+        'F', 'L', 'h', 'd',  6, 0, 0, 0,  0, 0,  1, 0,  96, 0
+    };
+    buf.insert(buf.end(), flhd, flhd + sizeof(flhd));
+
+    std::vector<uint8_t> events;
+    // Event 201: PluginID.InternalName = "Wasp XT"
+    events.push_back(201);
+    const char pluginName[] = "Wasp XT\0";
+    events.push_back(static_cast<uint8_t>(sizeof(pluginName)));
+    events.insert(events.end(), pluginName, pluginName + sizeof(pluginName));
+
+    // Event 213: PluginID.Data = 229 bytes (version 13 + 56 floats + 1 byte flags)
+    std::vector<uint8_t> chunk;
+    uint32_t ver = 13;
+    chunk.insert(chunk.end(), reinterpret_cast<const uint8_t*>(&ver), reinterpret_cast<const uint8_t*>(&ver) + 4);
+    for (size_t i = 0; i < 56; ++i) {
+        float f = 0.0f;
+        if (i == 22) f = 0.75f; // filterCutoff norm -> ~3556 Hz
+        if (i == 14) f = 0.80f; // ampSustain
+        chunk.insert(chunk.end(), reinterpret_cast<const uint8_t*>(&f), reinterpret_cast<const uint8_t*>(&f) + 4);
+    }
+    chunk.push_back(0x01); // flags: envLink = 1
+
+    events.push_back(213);
+    uint32_t cLen = static_cast<uint32_t>(chunk.size());
+    while (cLen >= 0x80) {
+        events.push_back(static_cast<uint8_t>((cLen & 0x7F) | 0x80));
+        cLen >>= 7;
+    }
+    events.push_back(static_cast<uint8_t>(cLen));
+    events.insert(events.end(), chunk.begin(), chunk.end());
+
+    // FLdt
+    buf.push_back('F'); buf.push_back('L'); buf.push_back('d'); buf.push_back('t');
+    uint32_t dtLen = static_cast<uint32_t>(events.size());
+    buf.insert(buf.end(), reinterpret_cast<const uint8_t*>(&dtLen), reinterpret_cast<const uint8_t*>(&dtLen) + 4);
+    buf.insert(buf.end(), events.begin(), events.end());
+
+    auto presets = PresetMigrator::parseFst(buf.data(), buf.size(), "Afraid Of The Dark Pad.fst");
+    assert(presets.size() == 1);
+    assert(presets[0].name == "Afraid Of The Dark Pad");
+    assert(presets[0].snapshot.envLink == 1.0f);
+
+    float expectedCutoff = PresetMigrator::scaleLogarithmic(0.75f, 20.0f, 20000.0f);
+    assert(std::abs(presets[0].snapshot.filterCutoff - expectedCutoff) < 1.0f);
+
+    std::cout << "  -> PASS: Native Wasp XT .fst parsed successfully with Cutoff="
+              << presets[0].snapshot.filterCutoff << " Hz, envLink="
+              << presets[0].snapshot.envLink << std::endl;
+}
+
 int main() {
     std::cout << "=== Bumbler XD PresetMigrator C++ Verification Suite ===" << std::endl;
     testScalingFormulas();
     testSyntheticFxpParsing();
     testXmlRoundtrip();
+    testNativeWaspFstParsing();
     std::cout << "=== ALL PRESET MIGRATOR C++ TESTS PASSED ===" << std::endl;
     return 0;
 }

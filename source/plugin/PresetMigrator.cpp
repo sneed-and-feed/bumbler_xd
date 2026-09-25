@@ -40,6 +40,66 @@ static const char* const kClassicWaspParams[32] = {
     "masterVolume"
 };
 
+// 56 native parameters corresponding to Wasp XT Delphi form controls (Tags 0..55)
+static const char* const kNativeWaspXtParams[56] = {
+    /* 00 */ "osc1Waveform",         // Osc1ShapeSelect (0=Saw, 1=Square, 2=Sine, 3=Noise)
+    /* 01 */ "osc1Octave",           // Osc1CoarseWheel
+    /* 02 */ "osc1Fine",             // Osc1FineWheel
+    /* 03 */ "osc2Waveform",         // Osc2ShapeSelect
+    /* 04 */ "osc2Octave",           // Osc2CoarseWheel
+    /* 05 */ "osc2Fine",             // Osc2FineWheel
+    /* 06 */ "osc3Waveform",         // Osc3ShapeSelect (0=Square, 1=Saw)
+    /* 07 */ "osc3Level",            // Osc3AmountWheel
+    /* 08 */ "oscMix",               // OscMixSlider
+    /* 09 */ "pulseWidth",           // PulseWidthWheel
+    /* 10 */ "fmAmount",             // FmAmountWheel
+    /* 11 */ "ringModMix",           // RingModBtn (0 or 1)
+    /* 12 */ "ampAttack",            // AmpAttackWheel
+    /* 13 */ "ampDecay",             // AmpDecayWheel
+    /* 14 */ "ampSustain",           // AmpSustainLevelWheel
+    /* 15 */ "ampRelease",           // AmpReleaseWheel
+    /* 16 */ "filterAttack",         // FiltAttack
+    /* 17 */ "filterDecay",          // FiltDecay
+    /* 18 */ "filterSustain",        // FiltSustainLevel
+    /* 19 */ "filterRelease",        // FiltRelease
+    /* 20 */ "filterKbTrack",        // KbTrackWheel
+    /* 21 */ "filterMode",           // FilterTypeSelect (0..5)
+    /* 22 */ "filterCutoff",         // CutoffWheel
+    /* 23 */ "filterResonance",      // ResonanceWheel
+    /* 24 */ "filterEnvAmount",      // EnvAmtWheel
+    /* 25 */ "lfo1Waveform",         // LFO1ShapeSelect (0..3)
+    /* 26 */ "lfo1Target",           // LFO1DestSelect (0..2)
+    /* 27 */ "lfo1Amount",           // LFO1AmountWheel
+    /* 28 */ "lfo1Rate",             // LFO1FreqWheel
+    /* 29 */ "lfo1Sync",             // LFO1SyncBtn
+    /* 30 */ "lfo1KeyReset",         // LFO1ResetBtn
+    /* 31 */ "lfo2Waveform",         // LFO2ShapeSelect (0..3)
+    /* 32 */ "lfo2Target",           // LFO2DestSelect (0..2)
+    /* 33 */ "lfo2Amount",           // LFO2AmountWheel
+    /* 34 */ "lfo2Rate",             // LFO2FreqWheel
+    /* 35 */ "lfo2Sync",             // LFO2SyncBtn
+    /* 36 */ "lfo2KeyReset",         // LFO2ResetBtn
+    /* 37 */ "driveEnabled",         // UseDistBtn
+    /* 38 */ "driveAmount",          // DistDriveWheel
+    /* 39 */ "driveTone",            // DistToneWheel
+    /* 40 */ "dualMode",             // DualVoiceBtn
+    /* 41 */ "velToFilter",          // VelocityFilterWheel
+    /* 42 */ "analogMode",           // AnalogBtn
+    /* 43 */ "modAttack",            // ModAttackWheel
+    /* 44 */ "modDecay",             // ModDecayWheel
+    /* 45 */ "modAmount",            // ModAmountWheel
+    /* 46 */ "modDest1",             // ModDest1Btn (Filter Cutoff)
+    /* 47 */ "modDest2",             // ModDest2Btn (Osc1 Pitch)
+    /* 48 */ "modDest3",             // ModDest3Btn (Osc2 Pitch)
+    /* 49 */ "modDest4",             // ModDest4Btn (Pulse Width)
+    /* 50 */ "masterVolume",         // VolumeWheel
+    /* 51 */ "aftertouch",           // AftertouchBtn
+    /* 52 */ "lfo1Delay",            // LFO1DelayWheel
+    /* 53 */ "lfo2Delay",            // LFO2DelayWheel
+    /* 54 */ "velToAmp",             // VelocityAmpWheel
+    /* 55 */ "wNoiseMode"            // WhiteNoiseBtn
+};
+
 // ============================================================================
 // Endianness & Buffer Reading Primitives
 // ============================================================================
@@ -329,6 +389,41 @@ ParameterSnapshot PresetMigrator::mapFloatsToSnapshot(const std::vector<float>& 
     return snap;
 }
 
+ParameterSnapshot PresetMigrator::mapNativeWaspFloatsToSnapshot(const std::vector<float>& floats, uint8_t flags) {
+    ParameterSnapshot snap = createDefaultSnapshot();
+    for (size_t i = 0; i < 56 && i < floats.size(); ++i) {
+        juce::String pid = kNativeWaspXtParams[i];
+        float rawVal = floats[i];
+        if (pid.startsWith("modDest") || pid == "aftertouch") {
+            continue;
+        }
+        float mappedVal = mapLegacyParamToApvts(pid, rawVal);
+        applyParamToSnapshot(snap, pid, mappedVal);
+    }
+
+    // Mod Destination Buttons (Tags 46..49)
+    // 46: ModDest1Btn (Filter Cutoff) -> target 0
+    // 47: ModDest2Btn (Osc1 Pitch)    -> target 1
+    // 48: ModDest3Btn (Osc2 Pitch)    -> target 1
+    // 49: ModDest4Btn (Pulse Width)   -> target 2
+    if (floats.size() > 49) {
+        if (floats[46] >= 0.5f) {
+            snap.modTarget = 0.0f; // Filter
+        } else if (floats[47] >= 0.5f || floats[48] >= 0.5f) {
+            snap.modTarget = 1.0f; // Pitch
+        } else if (floats[49] >= 0.5f) {
+            snap.modTarget = 2.0f; // Pulse Width
+        }
+    }
+
+    // Flags: Bit 0 = envLink (AmpCoupleFltBtn)
+    if (flags & 0x01) {
+        snap.envLink = 1.0f;
+    }
+
+    return snap;
+}
+
 std::map<juce::String, float> PresetMigrator::snapshotToMap(const ParameterSnapshot& s) {
     std::map<juce::String, float> m;
     m["osc1Waveform"]  = s.osc1Waveform;
@@ -578,6 +673,143 @@ std::vector<MigratedPreset> PresetMigrator::parseFxp(const void* dataPtr, size_t
     return out;
 }
 
+static std::vector<MigratedPreset> parseNativeWaspChunk(const uint8_t* chunk, size_t chunkLen, const juce::String& defaultName, const juce::String& filename) {
+    std::vector<MigratedPreset> out;
+    if (chunk == nullptr || chunkLen < 32) return out;
+
+    juce::String pName = defaultName.isNotEmpty() ? defaultName :
+        (filename.isNotEmpty() ? juce::File::createFileWithoutCheckingPath(filename).getFileNameWithoutExtension() : "Migrated Preset");
+
+    // 1. Check for embedded CcnK anywhere
+    for (size_t j = 0; j + 28 <= chunkLen; ++j) {
+        if (std::memcmp(chunk + j, "CcnK", 4) == 0) {
+            auto sub = PresetMigrator::parseFxp(chunk + j, chunkLen - j, filename);
+            if (!sub.empty()) {
+                for (auto& p : sub) {
+                    if (p.name.isEmpty() || p.name.startsWith("Patch ") || p.name == "Migrated Preset")
+                        p.name = pName;
+                }
+                return sub;
+            }
+        }
+    }
+
+    // 2. Native FL Studio Wasp XT chunk (Delphi TFruityPlug SaveRestoreState):
+    // Format: 4-byte version (10..13, e.g. 0x0D), followed by 224 bytes (56 floats), followed by 1 byte flags
+    if (chunkLen >= 229) {
+        uint32_t version = readLE32(chunk);
+        if (version >= 1 && version <= 32) {
+            std::vector<float> nativeFloats;
+            nativeFloats.reserve(56);
+            for (size_t i = 0; i < 56; ++i) {
+                nativeFloats.push_back(readLEFloat(chunk + 4 + i * 4));
+            }
+            uint8_t flags = chunk[4 + 224];
+            MigratedPreset p;
+            p.name = pName;
+            p.sourceFormat = "FL Studio Wasp XT Native (State v" + juce::String(version) + ")";
+            p.sourceFilePath = filename;
+            p.snapshot = PresetMigrator::mapNativeWaspFloatsToSnapshot(nativeFloats, flags);
+            p.parameterMap = PresetMigrator::snapshotToMap(p.snapshot);
+            p.category = PresetMigrator::inferCategory(pName, p.snapshot);
+            out.push_back(p);
+            return out;
+        }
+    }
+
+    // 3. Native FL Studio older version: 164 bytes (41 floats) or 208 bytes (52 floats)
+    if (chunkLen >= 169) {
+        uint32_t version = readLE32(chunk);
+        if (version >= 1 && version <= 32) {
+            size_t numFloats = (chunkLen >= 213) ? 52 : 41;
+            std::vector<float> nativeFloats;
+            nativeFloats.reserve(numFloats);
+            for (size_t i = 0; i < numFloats; ++i) {
+                nativeFloats.push_back(readLEFloat(chunk + 4 + i * 4));
+            }
+            uint8_t flags = (chunkLen >= 4 + numFloats * 4 + 1) ? chunk[4 + numFloats * 4] : 0;
+            MigratedPreset p;
+            p.name = pName;
+            p.sourceFormat = "FL Studio Wasp XT Native (State v" + juce::String(version) + ")";
+            p.sourceFilePath = filename;
+            p.snapshot = PresetMigrator::mapNativeWaspFloatsToSnapshot(nativeFloats, flags);
+            p.parameterMap = PresetMigrator::snapshotToMap(p.snapshot);
+            p.category = PresetMigrator::inferCategory(pName, p.snapshot);
+            out.push_back(p);
+            return out;
+        }
+    }
+
+    // 4. Raw 56 or 55 floats at offset 0
+    if (chunkLen >= 55 * 4) {
+        auto floats = extractFloats(chunk, chunkLen, true);
+        if (floats.empty()) floats = extractFloats(chunk, chunkLen, false);
+        if (floats.size() >= 55) {
+            MigratedPreset p;
+            p.name = pName;
+            p.sourceFormat = "FL Studio FST (Raw Floats)";
+            p.sourceFilePath = filename;
+            p.snapshot = (floats.size() >= 56) ?
+                PresetMigrator::mapNativeWaspFloatsToSnapshot(floats, 0) :
+                PresetMigrator::mapFloatsToSnapshot(floats, false);
+            p.parameterMap = PresetMigrator::snapshotToMap(p.snapshot);
+            p.category = PresetMigrator::inferCategory(pName, p.snapshot);
+            out.push_back(p);
+            return out;
+        }
+    }
+
+    // 5. Multi-offset scanning for 32..56 normalized floats in range [-3.5, 3.5]
+    for (size_t off = 0; off + 32 * 4 <= chunkLen && off <= 64; off += 4) {
+        size_t count = (chunkLen - off) / 4;
+        if (count > 56) count = 56;
+        size_t validCount = 0;
+        std::vector<float> candidate;
+        candidate.reserve(count);
+        for (size_t i = 0; i < count; ++i) {
+            float f = readLEFloat(chunk + off + i * 4);
+            if (std::isfinite(f) && f >= -3.5f && f <= 3.5f) {
+                validCount++;
+            }
+            candidate.push_back(f);
+        }
+        if (count >= 32 && validCount >= (count * 85) / 100) {
+            MigratedPreset p;
+            p.name = pName;
+            p.sourceFormat = "FL Studio FST (Scanned Block)";
+            p.sourceFilePath = filename;
+            p.snapshot = (candidate.size() >= 56) ?
+                PresetMigrator::mapNativeWaspFloatsToSnapshot(candidate, 0) :
+                PresetMigrator::mapFloatsToSnapshot(candidate, candidate.size() <= 36);
+            p.parameterMap = PresetMigrator::snapshotToMap(p.snapshot);
+            p.category = PresetMigrator::inferCategory(pName, p.snapshot);
+            out.push_back(p);
+            return out;
+        }
+    }
+
+    // 6. Byte knob values fallback (0..255)
+    if (chunkLen >= 32) {
+        std::vector<float> byteFloats;
+        for (size_t i = 0; i < std::min(chunkLen, size_t(56)); ++i) {
+            byteFloats.push_back(chunk[i] / 255.0f);
+        }
+        MigratedPreset p;
+        p.name = pName;
+        p.sourceFormat = "FL Studio FST (Raw Bytes)";
+        p.sourceFilePath = filename;
+        p.snapshot = (byteFloats.size() >= 56) ?
+            PresetMigrator::mapNativeWaspFloatsToSnapshot(byteFloats, 0) :
+            PresetMigrator::mapFloatsToSnapshot(byteFloats, byteFloats.size() <= 36);
+        p.parameterMap = PresetMigrator::snapshotToMap(p.snapshot);
+        p.category = PresetMigrator::inferCategory(pName, p.snapshot);
+        out.push_back(p);
+        return out;
+    }
+
+    return out;
+}
+
 std::vector<MigratedPreset> PresetMigrator::parseFst(const void* dataPtr, size_t sizeBytes, const juce::String& filename) {
     std::vector<MigratedPreset> out;
     if (dataPtr == nullptr || sizeBytes < 8) return out;
@@ -594,7 +826,15 @@ std::vector<MigratedPreset> PresetMigrator::parseFst(const void* dataPtr, size_t
         }
     }
 
-    // 2. RIFF Container
+    // 2. FLhd / FLdt Stream
+    for (size_t i = 0; i + 4 <= sizeBytes; ++i) {
+        if (std::memcmp(data + i, "FLhd", 4) == 0) {
+            auto flpOut = parseFlp(data + i, sizeBytes - i, filename);
+            if (!flpOut.empty()) return flpOut;
+        }
+    }
+
+    // 3. RIFF Container
     if (std::memcmp(data, "RIFF", 4) == 0 && sizeBytes >= 12) {
         size_t pos = 12;
         while (pos + 8 <= sizeBytes) {
@@ -606,69 +846,16 @@ std::vector<MigratedPreset> PresetMigrator::parseFst(const void* dataPtr, size_t
             if (pos + chunkLen > sizeBytes) break;
             const uint8_t* chunkPayload = data + pos;
 
-            if (std::strcmp(chunkId, "data") == 0 || std::strcmp(chunkId, "plug") == 0 ||
-                std::strcmp(chunkId, "stat") == 0 || std::strcmp(chunkId, "WASP") == 0) {
-                // Check for nested CcnK
-                for (size_t j = 0; j + 28 <= chunkLen; ++j) {
-                    if (std::memcmp(chunkPayload + j, "CcnK", 4) == 0) {
-                        auto sub = parseFxp(chunkPayload + j, chunkLen - j, filename);
-                        if (!sub.empty()) return sub;
-                    }
-                }
-                auto floats = extractFloats(chunkPayload, chunkLen, true);
-                if (floats.size() >= 10) {
-                    MigratedPreset p;
-                    p.name = baseName;
-                    p.sourceFormat = "FL Studio FST (RIFF)";
-                    p.sourceFilePath = filename;
-                    p.snapshot = mapFloatsToSnapshot(floats, floats.size() <= 36);
-                    p.parameterMap = snapshotToMap(p.snapshot);
-                    p.category = inferCategory(baseName, p.snapshot);
-                    out.push_back(p);
-                    return out;
-                }
-            }
+            auto sub = parseNativeWaspChunk(chunkPayload, chunkLen, baseName, filename);
+            if (!sub.empty()) return sub;
+
             pos += (chunkLen + 1) & ~1; // 2-byte alignment
         }
     }
 
-    // 3. FLhd / FLdt Stream
-    for (size_t i = 0; i + 4 <= sizeBytes; ++i) {
-        if (std::memcmp(data + i, "FLhd", 4) == 0) {
-            return parseFlp(data + i, sizeBytes - i, filename);
-        }
-    }
-
-    // 4. Raw float block fallback
-    auto floats = extractFloats(data, sizeBytes, true);
-    if (floats.empty()) floats = extractFloats(data, sizeBytes, false);
-    if (floats.size() >= 10) {
-        MigratedPreset p;
-        p.name = baseName;
-        p.sourceFormat = "FL Studio FST (Raw Floats)";
-        p.sourceFilePath = filename;
-        p.snapshot = mapFloatsToSnapshot(floats, floats.size() <= 36);
-        p.parameterMap = snapshotToMap(p.snapshot);
-        p.category = inferCategory(baseName, p.snapshot);
-        out.push_back(p);
-        return out;
-    }
-
-    // 5. Raw byte block fallback (0..255)
-    if (sizeBytes >= 32) {
-        std::vector<float> byteFloats;
-        for (size_t i = 0; i < std::min(sizeBytes, size_t(55)); ++i) {
-            byteFloats.push_back(data[i] / 255.0f);
-        }
-        MigratedPreset p;
-        p.name = baseName;
-        p.sourceFormat = "FL Studio FST (Raw Bytes)";
-        p.sourceFilePath = filename;
-        p.snapshot = mapFloatsToSnapshot(byteFloats, byteFloats.size() <= 36);
-        p.parameterMap = snapshotToMap(p.snapshot);
-        p.category = inferCategory(baseName, p.snapshot);
-        out.push_back(p);
-    }
+    // 4. Raw file scan fallback
+    auto fallback = parseNativeWaspChunk(data, sizeBytes, baseName, filename);
+    if (!fallback.empty()) return fallback;
 
     return out;
 }
@@ -727,6 +914,9 @@ std::vector<MigratedPreset> PresetMigrator::parseFlp(const void* dataPtr, size_t
     juce::String currentChanName;
     juce::String currentPluginName;
     int chanCounter = 0;
+    const bool isFstFile = filename.toLowerCase().endsWith(".fst");
+    const juce::String fileStem = filename.isNotEmpty() ?
+        juce::File::createFileWithoutCheckingPath(filename).getFileNameWithoutExtension() : "";
 
     while (pos < endPos) {
         uint8_t cmd = data[pos++];
@@ -750,56 +940,47 @@ std::vector<MigratedPreset> PresetMigrator::parseFlp(const void* dataPtr, size_t
             const uint8_t* chunkBytes = data + pos;
             pos += chunkLen;
 
-            if (cmd == 196 || cmd == 212) { // FLP_PluginName / FLP_ChanName
+            // String events:
+            // 192 = Channel Title / Name
+            // 196 = Plugin Name / Sample Path
+            // 201 = PluginID.InternalName (e.g. "Wasp XT", "Wasp", "Fruity Wrapper")
+            // 203 = PluginID.Name (e.g. "Wasp XT")
+            if (cmd == 192 || cmd == 196 || cmd == 201 || cmd == 203) {
                 juce::String strVal = juce::String::fromUTF8(reinterpret_cast<const char*>(chunkBytes), static_cast<int>(chunkLen)).trim();
+                while (strVal.endsWithChar('\0')) strVal = strVal.dropLastCharacters(1);
                 if (strVal.isNotEmpty()) {
-                    if (currentChanName.isEmpty() || currentChanName.startsWith("Channel "))
+                    if (cmd == 192 && (currentChanName.isEmpty() || currentChanName.startsWith("Channel ")))
                         currentChanName = strVal;
-                    if (strVal.toLowerCase().contains("wasp"))
+                    if (cmd == 196 || cmd == 201 || cmd == 203)
                         currentPluginName = strVal;
                 }
-            } else if (cmd == 197) { // FLP_PluginData (0xC5)
+            } else if (cmd == 213 || cmd == 197 || cmd == 212) {
+                // Plugin Data event (213=PluginID.Data, 197=FLP_PluginData, 212=Wrapper)
                 bool isWasp = currentPluginName.toLowerCase().contains("wasp") ||
-                              currentChanName.toLowerCase().contains("wasp");
-                if (!isWasp) {
-                    for (size_t j = 0; j + 4 <= chunkLen; ++j) {
-                        if (std::memcmp(chunkBytes + j, "Wasp", 4) == 0 || std::memcmp(chunkBytes + j, "CcnK", 4) == 0) {
-                            isWasp = true;
-                            break;
-                        }
-                    }
+                              currentChanName.toLowerCase().contains("wasp") ||
+                              filename.toLowerCase().contains("wasp") ||
+                              isFstFile;
+
+                juce::String pName;
+                if (isFstFile && fileStem.isNotEmpty() && !fileStem.startsWith("test_") && !fileStem.equalsIgnoreCase("Migrated FST")) {
+                    pName = fileStem;
+                } else if (currentChanName.isNotEmpty() && !currentChanName.startsWith("Channel ")) {
+                    pName = currentChanName;
+                } else if (currentPluginName.isNotEmpty()) {
+                    pName = currentPluginName;
+                } else {
+                    pName = juce::String::formatted("Wasp_Chan_%d", chanCounter > 0 ? chanCounter : 1);
                 }
 
-                if (isWasp || chunkLen == 55 * 4 || chunkLen == 32 * 4 || chunkLen == 55 || chunkLen == 32) {
-                    for (size_t j = 0; j + 28 <= chunkLen; ++j) {
-                        if (std::memcmp(chunkBytes + j, "CcnK", 4) == 0) {
-                            auto sub = parseFxp(chunkBytes + j, chunkLen - j, filename);
-                            if (!sub.empty()) {
-                                out.insert(out.end(), sub.begin(), sub.end());
-                                continue;
+                auto sub = parseNativeWaspChunk(chunkBytes, chunkLen, pName, filename);
+                if (!sub.empty()) {
+                    if (isWasp || !filename.toLowerCase().endsWith(".flp")) {
+                        if (filename.toLowerCase().endsWith(".flp")) {
+                            for (auto& p : sub) {
+                                p.sourceFormat = "FL Studio FLP Event 0x" + juce::String::toHexString(cmd).toUpperCase();
                             }
                         }
-                    }
-
-                    auto floats = extractFloats(chunkBytes, chunkLen, true);
-                    if (floats.empty()) floats = extractFloats(chunkBytes, chunkLen, false);
-                    if (floats.empty() && chunkLen >= 32) {
-                        for (size_t j = 0; j < std::min(size_t(chunkLen), size_t(55)); ++j)
-                            floats.push_back(chunkBytes[j] / 255.0f);
-                    }
-
-                    if (!floats.empty()) {
-                        juce::String pName = currentChanName.isNotEmpty() ? currentChanName :
-                                             (currentPluginName.isNotEmpty() ? currentPluginName :
-                                             juce::String::formatted("Wasp_Chan_%d", chanCounter));
-                        MigratedPreset p;
-                        p.name = pName;
-                        p.sourceFormat = "FL Studio FLP Event 0xC5";
-                        p.sourceFilePath = filename;
-                        p.snapshot = mapFloatsToSnapshot(floats, floats.size() <= 36);
-                        p.parameterMap = snapshotToMap(p.snapshot);
-                        p.category = inferCategory(pName, p.snapshot);
-                        out.push_back(p);
+                        out.insert(out.end(), sub.begin(), sub.end());
                     }
                 }
             }

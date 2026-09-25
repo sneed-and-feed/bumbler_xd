@@ -252,6 +252,54 @@ class TestSyntheticFSTAndFLPParsing(unittest.TestCase):
         self.assertIn("filterCutoff", p.parameters)
         self.assertIn("ampAttack", p.parameters)
 
+    def test_native_wasp_fst_parsing(self):
+        """Tests parsing a native FL Studio Wasp XT .fst event stream (event 213, version 13, 56 floats, flags)."""
+        # Header
+        flhd = b"FLhd" + struct.pack("<I", 6) + struct.pack("<HHH", 0, 1, 96)
+
+        events = bytearray()
+        # Event 201: PluginID.InternalName = "Wasp XT"
+        plugin_name = b"Wasp XT\x00"
+        events.append(201)
+        length = len(plugin_name)
+        while length >= 0x80:
+            events.append((length & 0x7F) | 0x80)
+            length >>= 7
+        events.append(length)
+        events.extend(plugin_name)
+
+        # Event 213: PluginID.Data = 229 bytes (version 13 + 56 floats + 1 byte flags)
+        native_chunk = bytearray()
+        native_chunk.extend(struct.pack("<I", 13))  # version 13
+        # 56 floats
+        floats = [0.0] * 56
+        floats[22] = 0.75  # filterCutoff: 0.75 norm -> ~3556 Hz
+        floats[14] = 0.80  # ampSustain
+        floats[49] = 1.0   # modDest4 (Pulse Width) -> modTarget = 2.0
+        for f in floats:
+            native_chunk.extend(struct.pack("<f", f))
+        native_chunk.append(0x01)  # flags: envLink = 1
+
+        events.append(213)
+        c_len = len(native_chunk)
+        while c_len >= 0x80:
+            events.append((c_len & 0x7F) | 0x80)
+            c_len >>= 7
+        events.append(c_len)
+        events.extend(native_chunk)
+
+        fldt = b"FLdt" + struct.pack("<I", len(events)) + bytes(events)
+        buf = flhd + fldt
+
+        presets = parse_fst_data(buf, "Afraid Of The Dark Pad.fst")
+        self.assertEqual(len(presets), 1)
+        p = presets[0]
+        self.assertEqual(p.name, "Afraid Of The Dark Pad")
+        self.assertAlmostEqual(p.parameters["filterCutoff"], 3556.56, places=1)
+        self.assertEqual(p.parameters["envLink"], 1.0)
+        self.assertEqual(p.parameters["modTarget"], 2.0)
+        self.assertEqual(p.source_format, "FL Studio Wasp XT Native (State v13)")
+
     def test_flp_wasp_channel_scan(self):
         """Tests scanning an FL Studio project (.flp) for event 0xC5 Wasp channels."""
         raw_floats = [0.1] * 55

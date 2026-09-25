@@ -67,6 +67,7 @@ public:
     static juce::String inferCategory(const juce::String& name, const ParameterSnapshot& snap);
     static ParameterSnapshot createDefaultSnapshot();
     static ParameterSnapshot mapFloatsToSnapshot(const std::vector<float>& floats, bool isClassicWasp32 = false);
+    static ParameterSnapshot mapNativeWaspFloatsToSnapshot(const std::vector<float>& floats, uint8_t flags = 0);
     static std::map<juce::String, float> snapshotToMap(const ParameterSnapshot& snap);
 };
 
