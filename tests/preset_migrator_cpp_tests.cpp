@@ -1,5 +1,4 @@
 #include <iostream>
-#include <cassert>
 #include <cmath>
 #include <vector>
 #include <cstring>
@@ -7,35 +6,42 @@
 
 using namespace bumbler;
 
+#define TEST_ASSERT(cond) do { \
+    if (!(cond)) { \
+        std::cerr << "FAILED: " << #cond << " at " << __FILE__ << ":" << __LINE__ << std::endl; \
+        std::exit(1); \
+    } \
+} while (false)
+
 static void testScalingFormulas() {
     std::cout << "[TEST] Running scaling formula verification..." << std::endl;
 
     // Logarithmic Cutoff (20 Hz to 20,000 Hz)
     float cutoff0 = PresetMigrator::scaleLogarithmic(0.0f, 20.0f, 20000.0f);
-    assert(std::abs(cutoff0 - 20.0f) < 0.01f);
+    TEST_ASSERT(std::abs(cutoff0 - 20.0f) < 0.01f);
 
     float cutoff1 = PresetMigrator::scaleLogarithmic(1.0f, 20.0f, 20000.0f);
-    assert(std::abs(cutoff1 - 20000.0f) < 0.1f);
+    TEST_ASSERT(std::abs(cutoff1 - 20000.0f) < 0.1f);
 
     float cutoffMid = PresetMigrator::scaleLogarithmic(0.5f, 20.0f, 20000.0f);
     float expectedMid = 20.0f * std::sqrt(1000.0f); // ~632.455 Hz
-    assert(std::abs(cutoffMid - expectedMid) < 0.1f);
+    TEST_ASSERT(std::abs(cutoffMid - expectedMid) < 0.1f);
 
     // Exponential Time Scaling (0.001s to 10.0s)
     float t0 = PresetMigrator::scaleExponentialTime(0.0f, 0.001f, 10.0f);
-    assert(std::abs(t0 - 0.001f) < 1e-5f);
+    TEST_ASSERT(std::abs(t0 - 0.001f) < 1e-5f);
 
     float t1 = PresetMigrator::scaleExponentialTime(1.0f, 0.001f, 10.0f);
-    assert(std::abs(t1 - 10.0f) < 1e-3f);
+    TEST_ASSERT(std::abs(t1 - 10.0f) < 1e-3f);
 
     float tMid = PresetMigrator::scaleExponentialTime(0.5f, 0.001f, 10.0f);
     float expectedTMid = 0.001f * std::sqrt(10000.0f); // 0.10s
-    assert(std::abs(tMid - expectedTMid) < 1e-4f);
+    TEST_ASSERT(std::abs(tMid - expectedTMid) < 1e-4f);
 
     // Bipolar scaling
-    assert(std::abs(PresetMigrator::scaleBipolar(0.0f) - (-1.0f)) < 1e-5f);
-    assert(std::abs(PresetMigrator::scaleBipolar(0.5f) - 0.0f) < 1e-5f);
-    assert(std::abs(PresetMigrator::scaleBipolar(1.0f) - 1.0f) < 1e-5f);
+    TEST_ASSERT(std::abs(PresetMigrator::scaleBipolar(0.0f) - (-1.0f)) < 1e-5f);
+    TEST_ASSERT(std::abs(PresetMigrator::scaleBipolar(0.5f) - 0.0f) < 1e-5f);
+    TEST_ASSERT(std::abs(PresetMigrator::scaleBipolar(1.0f) - 1.0f) < 1e-5f);
 
     std::cout << "  -> PASS: All mathematical scaling curves exact." << std::endl;
 }
@@ -74,14 +80,14 @@ static void testSyntheticFxpParsing() {
     }
 
     auto presets = PresetMigrator::parseFxp(buffer.data(), buffer.size(), "test_patch.fxp");
-    assert(presets.size() == 1);
-    assert(presets[0].name == "303 Squelch Bass");
-    assert(presets[0].category == "Bass");
-    assert(presets[0].sourceFormat.contains("FxCk"));
+    TEST_ASSERT(presets.size() == 1);
+    TEST_ASSERT(presets[0].name == "303 Squelch Bass");
+    TEST_ASSERT(presets[0].category == "Bass");
+    TEST_ASSERT(presets[0].sourceFormat.contains("FxCk"));
 
     // Verify cutoff at norm=0.5
     float expectedCutoff = 20.0f * std::sqrt(1000.0f);
-    assert(std::abs(presets[0].snapshot.filterCutoff - expectedCutoff) < 0.5f);
+    TEST_ASSERT(std::abs(presets[0].snapshot.filterCutoff - expectedCutoff) < 0.5f);
 
     std::cout << "  -> PASS: Synthetic FXP parsed and classified as " << presets[0].category << std::endl;
 }
@@ -99,17 +105,17 @@ static void testXmlRoundtrip() {
     p.parameterMap = PresetMigrator::snapshotToMap(p.snapshot);
 
     juce::String xml = p.toXml();
-    assert(xml.contains("<BumblerXD"));
-    assert(xml.contains("name=\"Celestial Choir Pad\""));
-    assert(xml.contains("category=\"Pad\""));
-    assert(xml.contains("id=\"ampAttack\""));
+    TEST_ASSERT(xml.contains("<BumblerXD"));
+    TEST_ASSERT(xml.contains("name=\"Celestial Choir Pad\""));
+    TEST_ASSERT(xml.contains("category=\"Pad\""));
+    TEST_ASSERT(xml.contains("id=\"ampAttack\""));
 
     auto restored = PresetMigrator::parseXml(xml, "in_memory.xml");
-    assert(restored.size() == 1);
-    assert(restored[0].name == "Celestial Choir Pad");
-    assert(restored[0].category == "Pad");
-    assert(std::abs(restored[0].snapshot.ampAttack - 1.25f) < 1e-4f);
-    assert(std::abs(restored[0].snapshot.ampRelease - 2.0f) < 1e-4f);
+    TEST_ASSERT(restored.size() == 1);
+    TEST_ASSERT(restored[0].name == "Celestial Choir Pad");
+    TEST_ASSERT(restored[0].category == "Pad");
+    TEST_ASSERT(std::abs(restored[0].snapshot.ampAttack - 1.25f) < 1e-4f);
+    TEST_ASSERT(std::abs(restored[0].snapshot.ampRelease - 2.0f) < 1e-4f);
 
     std::cout << "  -> PASS: XML serialization and deserialization bit-identical." << std::endl;
 }
@@ -159,16 +165,49 @@ static void testNativeWaspFstParsing() {
     buf.insert(buf.end(), events.begin(), events.end());
 
     auto presets = PresetMigrator::parseFst(buf.data(), buf.size(), "Afraid Of The Dark Pad.fst");
-    assert(presets.size() == 1);
-    assert(presets[0].name == "Afraid Of The Dark Pad");
-    assert(presets[0].snapshot.envLink == 1.0f);
+    TEST_ASSERT(presets.size() == 1);
+    TEST_ASSERT(presets[0].name == "Afraid Of The Dark Pad");
+    TEST_ASSERT(presets[0].snapshot.envLink == 1.0f);
 
     float expectedCutoff = PresetMigrator::scaleLogarithmic(0.75f, 20.0f, 20000.0f);
-    assert(std::abs(presets[0].snapshot.filterCutoff - expectedCutoff) < 1.0f);
+    TEST_ASSERT(std::abs(presets[0].snapshot.filterCutoff - expectedCutoff) < 1.0f);
 
     std::cout << "  -> PASS: Native Wasp XT .fst parsed successfully with Cutoff="
               << presets[0].snapshot.filterCutoff << " Hz, envLink="
               << presets[0].snapshot.envLink << std::endl;
+}
+
+static void testRealDesktopFstFiles() {
+    juce::File desktopDir(R"(C:\Users\x\Desktop\3253-Image-Line Wasp XT\Image-Line Wasp XT)");
+    if (!desktopDir.isDirectory()) return;
+
+    std::cout << "[TEST] Running real desktop .fst files verification..." << std::endl;
+    auto presets = PresetMigrator::migrateDirectory(desktopDir, true);
+    std::cout << "  -> Migrated " << presets.size() << " patches from desktop." << std::endl;
+    for (const auto& p : presets) {
+        std::cout << "     Patch: '" << p.name << "' (" << p.category << ") via " << p.sourceFormat
+                  << " | Cutoff=" << p.snapshot.filterCutoff << " Hz"
+                  << " | Res=" << p.snapshot.filterResonance
+                  << " | Drive=" << p.snapshot.driveAmount << std::endl;
+    }
+
+    TEST_ASSERT(presets.size() == 10);
+    for (const auto& p : presets) {
+        TEST_ASSERT(p.sourceFormat == "FL Studio Wasp XT Native (State v12)");
+        TEST_ASSERT(p.snapshot.filterCutoff >= 100.0f && p.snapshot.filterCutoff <= 20000.0f);
+        TEST_ASSERT(p.snapshot.masterVolume > 0.0f);
+    }
+
+    // Verify ElectBell has Sine osc and open filter
+    bool foundElectBell = false;
+    for (const auto& p : presets) {
+        if (p.name == "ElectBell_-_01") {
+            foundElectBell = true;
+            TEST_ASSERT(p.snapshot.osc1Waveform == 2.0f); // Sine
+            TEST_ASSERT(p.snapshot.filterCutoff > 19000.0f); // Wide open
+        }
+    }
+    TEST_ASSERT(foundElectBell);
 }
 
 int main() {
@@ -177,6 +216,7 @@ int main() {
     testSyntheticFxpParsing();
     testXmlRoundtrip();
     testNativeWaspFstParsing();
+    testRealDesktopFstFiles();
     std::cout << "=== ALL PRESET MIGRATOR C++ TESTS PASSED ===" << std::endl;
     return 0;
 }

@@ -300,6 +300,63 @@ class TestSyntheticFSTAndFLPParsing(unittest.TestCase):
         self.assertEqual(p.parameters["modTarget"], 2.0)
         self.assertEqual(p.source_format, "FL Studio Wasp XT Native (State v13)")
 
+    def test_delphi_native_wasp_fst_parsing(self):
+        """Tests parsing a native Delphi FL Studio Wasp XT chunk with 56 integer parameters."""
+        flhd = b"FLhd" + struct.pack("<I", 6) + struct.pack("<HHH", 0, 1, 96)
+        events = bytearray()
+
+        # Event 201: PluginID.InternalName = "Wasp XT"
+        plugin_name = b"Wasp XT\x00"
+        events.append(201)
+        events.append(len(plugin_name))
+        events.extend(plugin_name)
+
+        # Event 212: Wrapper settings (52 bytes) - should be ignored!
+        wrapper_chunk = bytes(52)
+        events.append(212)
+        events.append(len(wrapper_chunk))
+        events.extend(wrapper_chunk)
+
+        # Event 213: PluginID.Data = 229 bytes (version 12 + 56 ints + 1 byte flags)
+        native_chunk = bytearray()
+        native_chunk.extend(struct.pack("<I", 12))  # version 12
+        # 56 Delphi ints
+        ints = [0] * 56
+        ints[0] = 2       # osc1Waveform = Sine (2)
+        ints[1] = 128     # osc1Octave = +3
+        ints[2] = 64      # osc1Fine = 0.0
+        ints[21] = 0      # filterMode = LP12 (0)
+        ints[22] = 512    # filterCutoff = 20000 Hz
+        ints[23] = 80     # filterResonance = 80/128 = 0.625
+        ints[50] = 128    # masterVolume = 1.0
+        for val in ints:
+            native_chunk.extend(struct.pack("<i", val))
+        native_chunk.append(0x02)  # flags: envLink (bit 1) = 1
+
+        events.append(213)
+        c_len = len(native_chunk)
+        while c_len >= 0x80:
+            events.append((c_len & 0x7F) | 0x80)
+            c_len >>= 7
+        events.append(c_len)
+        events.extend(native_chunk)
+
+        fldt = b"FLdt" + struct.pack("<I", len(events)) + bytes(events)
+        buf = flhd + fldt
+
+        presets = parse_fst_data(buf, "ElectBell_Test.fst")
+        # Ensure ONLY 1 preset is parsed (Event 212 wrapper ignored!)
+        self.assertEqual(len(presets), 1)
+        p = presets[0]
+        self.assertEqual(p.name, "ElectBell_Test")
+        self.assertEqual(p.parameters["osc1Waveform"], 2.0)
+        self.assertEqual(p.parameters["osc1Octave"], 3.0)
+        self.assertAlmostEqual(p.parameters["osc1Fine"], 0.0, places=2)
+        self.assertAlmostEqual(p.parameters["filterCutoff"], 20000.0, places=1)
+        self.assertAlmostEqual(p.parameters["filterResonance"], 0.625, places=2)
+        self.assertEqual(p.parameters["envLink"], 1.0)
+        self.assertEqual(p.source_format, "FL Studio Wasp XT Native (State v12)")
+
     def test_flp_wasp_channel_scan(self):
         """Tests scanning an FL Studio project (.flp) for event 0xC5 Wasp channels."""
         raw_floats = [0.1] * 55

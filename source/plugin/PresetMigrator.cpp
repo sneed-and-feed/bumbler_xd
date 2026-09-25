@@ -416,12 +416,125 @@ ParameterSnapshot PresetMigrator::mapNativeWaspFloatsToSnapshot(const std::vecto
         }
     }
 
-    // Flags: Bit 0 = envLink (AmpCoupleFltBtn)
-    if (flags & 0x01) {
+    // Flags: Bit 0 or Bit 1 = envLink (AmpCoupleFltBtn)
+    if ((flags & 0x01) || (flags & 0x02)) {
         snap.envLink = 1.0f;
     }
 
     return snap;
+}
+
+ParameterSnapshot PresetMigrator::mapDelphiWaspIntegersToSnapshot(const std::vector<int32_t>& ints, uint8_t flags) {
+    ParameterSnapshot s = createDefaultSnapshot();
+    if (ints.empty()) return s;
+
+    std::vector<int32_t> p = ints;
+    if (p.size() < 56) {
+        p.resize(56, 0);
+        if (ints.size() <= 50) p[50] = 107; // Default volume = 107/128 (~0.84)
+    }
+
+    // 0: Osc 1 Waveform (0=Saw, 1=Square, 2=Sine, 3=Noise)
+    s.osc1Waveform = clamp(static_cast<float>(p[0]), 0.0f, 3.0f);
+    // 1: Osc 1 Coarse (0..128, Def=64) -> -3..+3 octaves
+    s.osc1Octave = clamp(std::round((p[1] / 128.0f) * 6.0f - 3.0f), -3.0f, 3.0f);
+    // 2: Osc 1 Fine (0..128, Def=64) -> -1.0..+1.0
+    s.osc1Fine = clamp((p[2] / 128.0f) * 2.0f - 1.0f, -1.0f, 1.0f);
+
+    // 3: Osc 2 Waveform (0=Saw, 1=Square, 2=Sine, 3=Noise)
+    s.osc2Waveform = clamp(static_cast<float>(p[3]), 0.0f, 3.0f);
+    // 4: Osc 2 Coarse (0..128, Def=64) -> -3..+3 octaves
+    s.osc2Octave = clamp(std::round((p[4] / 128.0f) * 6.0f - 3.0f), -3.0f, 3.0f);
+    // 5: Osc 2 Fine (0..128, Def=64) -> -1.0..+1.0
+    s.osc2Fine = clamp((p[5] / 128.0f) * 2.0f - 1.0f, -1.0f, 1.0f);
+
+    // 6: Osc 3 Waveform (0=Square, 1=Saw)
+    s.osc3Waveform = p[6] > 0 ? 1.0f : 0.0f;
+    // 7: Osc 3 Level (0..128)
+    s.osc3Level = clamp(p[7] / 128.0f, 0.0f, 1.0f);
+    // 8: Osc Mix (0..128)
+    s.oscMix = clamp(p[8] / 128.0f, 0.0f, 1.0f);
+    // 9: Pulse Width (0..128) -> 0.01..0.99
+    s.pulseWidth = clamp(0.01f + (p[9] / 128.0f) * 0.98f, 0.01f, 0.99f);
+    // 10: FM Amount (0..128)
+    s.fmAmount = clamp(p[10] / 128.0f, 0.0f, 1.0f);
+    // 11: Ring Mod Mix (0 or 1)
+    s.ringModMix = p[11] > 0 ? 1.0f : 0.0f;
+
+    // Envelopes: Amp ADSR (0..128)
+    s.ampAttack  = scaleExponentialTime(clamp(p[12] / 128.0f, 0.0f, 1.0f), 0.001f, 10.0f);
+    s.ampDecay   = scaleExponentialTime(clamp(p[13] / 128.0f, 0.0f, 1.0f), 0.001f, 10.0f);
+    s.ampSustain = clamp(p[14] / 128.0f, 0.0f, 1.0f);
+    s.ampRelease = scaleExponentialTime(clamp(p[15] / 128.0f, 0.0f, 1.0f), 0.001f, 10.0f);
+
+    // Envelopes: Filter ADSR (0..128)
+    s.filterAttack  = scaleExponentialTime(clamp(p[16] / 128.0f, 0.0f, 1.0f), 0.001f, 10.0f);
+    s.filterDecay   = scaleExponentialTime(clamp(p[17] / 128.0f, 0.0f, 1.0f), 0.001f, 10.0f);
+    s.filterSustain = clamp(p[18] / 128.0f, 0.0f, 1.0f);
+    s.filterRelease = scaleExponentialTime(clamp(p[19] / 128.0f, 0.0f, 1.0f), 0.001f, 10.0f);
+
+    // Filter Controls
+    s.filterKbTrack = clamp(p[20] / 128.0f, 0.0f, 1.0f);
+    s.filterMode = clamp(static_cast<float>(p[21]), 0.0f, 5.0f);
+    // Cutoff: Max 512!
+    s.filterCutoff = scaleLogarithmic(clamp(p[22] / 512.0f, 0.0f, 1.0f), 20.0f, 20000.0f);
+    s.filterResonance = clamp(p[23] / 128.0f, 0.0f, 1.0f);
+    // Env Amount: Bipolar -1..+1 (0..128, Def=64)
+    s.filterEnvAmount = clamp((p[24] / 128.0f) * 2.0f - 1.0f, -1.0f, 1.0f);
+
+    // LFO 1
+    s.lfo1Waveform = clamp(static_cast<float>(p[25]), 0.0f, 3.0f);
+    s.lfo1Target = clamp(static_cast<float>(p[26]), 0.0f, 2.0f);
+    s.lfo1Amount = clamp(p[27] / 128.0f, 0.0f, 1.0f);
+    s.lfo1Rate = scaleLfoRate(clamp(p[28] / 128.0f, 0.0f, 1.0f), 0.05f, 30.0f);
+    s.lfo1Sync = p[29] > 0 ? 1.0f : 0.0f;
+    s.lfo1KeyReset = p[30] > 0 ? 1.0f : 0.0f;
+
+    // LFO 2
+    s.lfo2Waveform = clamp(static_cast<float>(p[31]), 0.0f, 3.0f);
+    s.lfo2Target = clamp(static_cast<float>(p[32]), 0.0f, 2.0f);
+    s.lfo2Amount = clamp(p[33] / 128.0f, 0.0f, 1.0f);
+    s.lfo2Rate = scaleLfoRate(clamp(p[34] / 128.0f, 0.0f, 1.0f), 0.05f, 30.0f);
+    s.lfo2Sync = p[35] > 0 ? 1.0f : 0.0f;
+    s.lfo2KeyReset = p[36] > 0 ? 1.0f : 0.0f;
+
+    // Character & Voices
+    s.driveEnabled = p[37] > 0 ? 1.0f : 0.0f;
+    s.driveAmount = clamp(p[38] / 128.0f, 0.0f, 1.0f);
+    s.driveTone = clamp(p[39] / 128.0f, 0.0f, 1.0f);
+    s.dualMode = p[40] > 0 ? 1.0f : 0.0f;
+    s.velToFilter = clamp(p[41] / 128.0f, 0.0f, 1.0f);
+    s.analogMode = p[42] > 0 ? 1.0f : 0.0f;
+
+    // Mod Envelope
+    s.modAttack = scaleExponentialTime(clamp(p[43] / 128.0f, 0.0f, 1.0f), 0.001f, 5.0f);
+    s.modDecay = scaleExponentialTime(clamp(p[44] / 128.0f, 0.0f, 1.0f), 0.001f, 10.0f);
+    s.modAmount = clamp((p[45] / 128.0f) * 2.0f - 1.0f, -1.0f, 1.0f);
+
+    // Mod Destination Buttons (Tags 46..49)
+    if (p[46] > 0) {
+        s.modTarget = 0.0f; // Filter
+    } else if (p[47] > 0 || p[48] > 0) {
+        s.modTarget = 1.0f; // Pitch
+    } else if (p[49] > 0) {
+        s.modTarget = 2.0f; // Pulse Width
+    } else {
+        s.modTarget = 0.0f;
+    }
+
+    // Output & Delay
+    s.masterVolume = clamp(p[50] / 128.0f, 0.0f, 1.0f);
+    s.lfo1Delay = clamp((p[52] / 128.0f) * 5.0f, 0.0f, 5.0f);
+    s.lfo2Delay = clamp((p[53] / 128.0f) * 5.0f, 0.0f, 5.0f);
+    s.velToAmp = clamp(p[54] / 128.0f, 0.0f, 1.0f);
+    s.wNoiseMode = p[55] > 0 ? 1.0f : 0.0f;
+
+    // Flags: Bit 0 or Bit 1 = envLink (AmpCoupleFltBtn)
+    if ((flags & 0x01) || (flags & 0x02)) {
+        s.envLink = 1.0f;
+    }
+
+    return s;
 }
 
 std::map<juce::String, float> PresetMigrator::snapshotToMap(const ParameterSnapshot& s) {
@@ -695,21 +808,38 @@ static std::vector<MigratedPreset> parseNativeWaspChunk(const uint8_t* chunk, si
     }
 
     // 2. Native FL Studio Wasp XT chunk (Delphi TFruityPlug SaveRestoreState):
-    // Format: 4-byte version (10..13, e.g. 0x0D), followed by 224 bytes (56 floats), followed by 1 byte flags
+    // Format: 4-byte version (10..13, e.g. 0x0D), followed by 224 bytes (56 dwords), followed by 1 byte flags
     if (chunkLen >= 229) {
         uint32_t version = readLE32(chunk);
         if (version >= 1 && version <= 32) {
-            std::vector<float> nativeFloats;
-            nativeFloats.reserve(56);
+            bool isDelphiInts = true;
             for (size_t i = 0; i < 56; ++i) {
-                nativeFloats.push_back(readLEFloat(chunk + 4 + i * 4));
+                uint32_t u = readLE32(chunk + 4 + i * 4);
+                if (u > 2048) {
+                    isDelphiInts = false;
+                    break;
+                }
             }
             uint8_t flags = chunk[4 + 224];
             MigratedPreset p;
             p.name = pName;
             p.sourceFormat = "FL Studio Wasp XT Native (State v" + juce::String(version) + ")";
             p.sourceFilePath = filename;
-            p.snapshot = PresetMigrator::mapNativeWaspFloatsToSnapshot(nativeFloats, flags);
+            if (isDelphiInts) {
+                std::vector<int32_t> nativeInts;
+                nativeInts.reserve(56);
+                for (size_t i = 0; i < 56; ++i) {
+                    nativeInts.push_back(static_cast<int32_t>(readLE32(chunk + 4 + i * 4)));
+                }
+                p.snapshot = PresetMigrator::mapDelphiWaspIntegersToSnapshot(nativeInts, flags);
+            } else {
+                std::vector<float> nativeFloats;
+                nativeFloats.reserve(56);
+                for (size_t i = 0; i < 56; ++i) {
+                    nativeFloats.push_back(readLEFloat(chunk + 4 + i * 4));
+                }
+                p.snapshot = PresetMigrator::mapNativeWaspFloatsToSnapshot(nativeFloats, flags);
+            }
             p.parameterMap = PresetMigrator::snapshotToMap(p.snapshot);
             p.category = PresetMigrator::inferCategory(pName, p.snapshot);
             out.push_back(p);
@@ -717,22 +847,38 @@ static std::vector<MigratedPreset> parseNativeWaspChunk(const uint8_t* chunk, si
         }
     }
 
-    // 3. Native FL Studio older version: 164 bytes (41 floats) or 208 bytes (52 floats)
+    // 3. Native FL Studio older version: 164 bytes (41 dwords) or 208 bytes (52 dwords)
     if (chunkLen >= 169) {
         uint32_t version = readLE32(chunk);
         if (version >= 1 && version <= 32) {
-            size_t numFloats = (chunkLen >= 213) ? 52 : 41;
-            std::vector<float> nativeFloats;
-            nativeFloats.reserve(numFloats);
-            for (size_t i = 0; i < numFloats; ++i) {
-                nativeFloats.push_back(readLEFloat(chunk + 4 + i * 4));
+            size_t numDwords = (chunkLen >= 213) ? 52 : 41;
+            bool isDelphiInts = true;
+            for (size_t i = 0; i < numDwords; ++i) {
+                uint32_t u = readLE32(chunk + 4 + i * 4);
+                if (u > 2048) {
+                    isDelphiInts = false;
+                    break;
+                }
             }
-            uint8_t flags = (chunkLen >= 4 + numFloats * 4 + 1) ? chunk[4 + numFloats * 4] : 0;
+            uint8_t flags = (chunkLen >= 4 + numDwords * 4 + 1) ? chunk[4 + numDwords * 4] : 0;
             MigratedPreset p;
             p.name = pName;
             p.sourceFormat = "FL Studio Wasp XT Native (State v" + juce::String(version) + ")";
             p.sourceFilePath = filename;
-            p.snapshot = PresetMigrator::mapNativeWaspFloatsToSnapshot(nativeFloats, flags);
+            if (isDelphiInts) {
+                std::vector<int32_t> nativeInts(56, 0);
+                for (size_t i = 0; i < numDwords; ++i) {
+                    nativeInts[i] = static_cast<int32_t>(readLE32(chunk + 4 + i * 4));
+                }
+                p.snapshot = PresetMigrator::mapDelphiWaspIntegersToSnapshot(nativeInts, flags);
+            } else {
+                std::vector<float> nativeFloats;
+                nativeFloats.reserve(numDwords);
+                for (size_t i = 0; i < numDwords; ++i) {
+                    nativeFloats.push_back(readLEFloat(chunk + 4 + i * 4));
+                }
+                p.snapshot = PresetMigrator::mapNativeWaspFloatsToSnapshot(nativeFloats, flags);
+            }
             p.parameterMap = PresetMigrator::snapshotToMap(p.snapshot);
             p.category = PresetMigrator::inferCategory(pName, p.snapshot);
             out.push_back(p);
@@ -954,8 +1100,9 @@ std::vector<MigratedPreset> PresetMigrator::parseFlp(const void* dataPtr, size_t
                     if (cmd == 196 || cmd == 201 || cmd == 203)
                         currentPluginName = strVal;
                 }
-            } else if (cmd == 213 || cmd == 197 || cmd == 212) {
-                // Plugin Data event (213=PluginID.Data, 197=FLP_PluginData, 212=Wrapper)
+            } else if (cmd == 213 || cmd == 197) {
+                // Plugin Data event (213=PluginID.Data, 197=FLP_PluginData)
+                // Note: cmd 212 is Fruity Wrapper GUI settings (52 bytes) and must NOT be parsed as plugin state
                 bool isWasp = currentPluginName.toLowerCase().contains("wasp") ||
                               currentChanName.toLowerCase().contains("wasp") ||
                               filename.toLowerCase().contains("wasp") ||

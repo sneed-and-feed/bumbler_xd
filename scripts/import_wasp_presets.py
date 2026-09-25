@@ -475,8 +475,134 @@ def map_native_wasp_floats_to_preset(
         elif floats[49] >= 0.5:
             params["modTarget"] = 2.0  # Pulse Width
 
-    # Flags: Bit 0 = envLink (AmpCoupleFltBtn)
-    if flags & 0x01:
+    # Flags: Bit 0 or Bit 1 = envLink (AmpCoupleFltBtn)
+    if (flags & 0x01) or (flags & 0x02):
+        params["envLink"] = 1.0
+
+    preset = ParsedPreset(
+        name=preset_name.strip() or "Migrated Preset",
+        parameters=params,
+        source_format=source_format,
+        source_file=source_file
+    )
+    preset.category = preset.auto_classify_category()
+    return preset
+
+
+def map_delphi_wasp_integers_to_preset(
+    ints: Sequence[int],
+    preset_name: str,
+    source_format: str,
+    source_file: str,
+    flags: int = 0
+) -> ParsedPreset:
+    """Maps 56 Delphi Wasp XT integer parameters (Tags 0..55) + flags to a ParsedPreset."""
+    params: Dict[str, float] = {}
+    for spec in ALL_55_PARAMS:
+        params[spec.id] = spec.default_val
+
+    p = list(ints)
+    if len(p) < 56:
+        p.extend([0] * (56 - len(p)))
+        if len(ints) <= 50:
+            p[50] = 107  # Default master volume ~0.84
+
+    # 0: Osc 1 Waveform (0=Saw, 1=Square, 2=Sine, 3=Noise)
+    params["osc1Waveform"] = float(clamp(float(p[0]), 0.0, 3.0))
+    # 1: Osc 1 Coarse (0..128, Def=64) -> -3..+3 octaves
+    params["osc1Octave"] = float(clamp(round((p[1] / 128.0) * 6.0 - 3.0), -3.0, 3.0))
+    # 2: Osc 1 Fine (0..128, Def=64) -> -1.0..+1.0
+    params["osc1Fine"] = clamp((p[2] / 128.0) * 2.0 - 1.0, -1.0, 1.0)
+
+    # 3: Osc 2 Waveform (0=Saw, 1=Square, 2=Sine, 3=Noise)
+    params["osc2Waveform"] = float(clamp(float(p[3]), 0.0, 3.0))
+    # 4: Osc 2 Coarse (0..128, Def=64) -> -3..+3 octaves
+    params["osc2Octave"] = float(clamp(round((p[4] / 128.0) * 6.0 - 3.0), -3.0, 3.0))
+    # 5: Osc 2 Fine (0..128, Def=64) -> -1.0..+1.0
+    params["osc2Fine"] = clamp((p[5] / 128.0) * 2.0 - 1.0, -1.0, 1.0)
+
+    # 6: Osc 3 Waveform (0=Square, 1=Saw)
+    params["osc3Waveform"] = 1.0 if p[6] > 0 else 0.0
+    # 7: Osc 3 Level (0..128)
+    params["osc3Level"] = clamp(p[7] / 128.0, 0.0, 1.0)
+    # 8: Osc Mix (0..128)
+    params["oscMix"] = clamp(p[8] / 128.0, 0.0, 1.0)
+    # 9: Pulse Width (0..128) -> 0.01..0.99
+    params["pulseWidth"] = clamp(0.01 + (p[9] / 128.0) * 0.98, 0.01, 0.99)
+    # 10: FM Amount (0..128)
+    params["fmAmount"] = clamp(p[10] / 128.0, 0.0, 1.0)
+    # 11: Ring Mod Mix (0 or 1)
+    params["ringModMix"] = 1.0 if p[11] > 0 else 0.0
+
+    # Envelopes: Amp ADSR (0..128)
+    params["ampAttack"]  = scale_exponential_time(clamp(p[12] / 128.0, 0.0, 1.0), 0.001, 10.0)
+    params["ampDecay"]   = scale_exponential_time(clamp(p[13] / 128.0, 0.0, 1.0), 0.001, 10.0)
+    params["ampSustain"] = clamp(p[14] / 128.0, 0.0, 1.0)
+    params["ampRelease"] = scale_exponential_time(clamp(p[15] / 128.0, 0.0, 1.0), 0.001, 10.0)
+
+    # Envelopes: Filter ADSR (0..128)
+    params["filterAttack"]  = scale_exponential_time(clamp(p[16] / 128.0, 0.0, 1.0), 0.001, 10.0)
+    params["filterDecay"]   = scale_exponential_time(clamp(p[17] / 128.0, 0.0, 1.0), 0.001, 10.0)
+    params["filterSustain"] = clamp(p[18] / 128.0, 0.0, 1.0)
+    params["filterRelease"] = scale_exponential_time(clamp(p[19] / 128.0, 0.0, 1.0), 0.001, 10.0)
+
+    # Filter Controls
+    params["filterKbTrack"] = clamp(p[20] / 128.0, 0.0, 1.0)
+    params["filterMode"] = float(clamp(float(p[21]), 0.0, 5.0))
+    # Cutoff: Max 512!
+    params["filterCutoff"] = scale_logarithmic(clamp(p[22] / 512.0, 0.0, 1.0), 20.0, 20000.0)
+    params["filterResonance"] = clamp(p[23] / 128.0, 0.0, 1.0)
+    # Env Amount: Bipolar -1..+1 (0..128, Def=64)
+    params["filterEnvAmount"] = clamp((p[24] / 128.0) * 2.0 - 1.0, -1.0, 1.0)
+
+    # LFO 1
+    params["lfo1Waveform"] = float(clamp(float(p[25]), 0.0, 3.0))
+    params["lfo1Target"] = float(clamp(float(p[26]), 0.0, 2.0))
+    params["lfo1Amount"] = clamp(p[27] / 128.0, 0.0, 1.0)
+    params["lfo1Rate"] = scale_lfo_rate(clamp(p[28] / 128.0, 0.0, 1.0), 0.05, 30.0)
+    params["lfo1Sync"] = 1.0 if p[29] > 0 else 0.0
+    params["lfo1KeyReset"] = 1.0 if p[30] > 0 else 0.0
+
+    # LFO 2
+    params["lfo2Waveform"] = float(clamp(float(p[31]), 0.0, 3.0))
+    params["lfo2Target"] = float(clamp(float(p[32]), 0.0, 2.0))
+    params["lfo2Amount"] = clamp(p[33] / 128.0, 0.0, 1.0)
+    params["lfo2Rate"] = scale_lfo_rate(clamp(p[34] / 128.0, 0.0, 1.0), 0.05, 30.0)
+    params["lfo2Sync"] = 1.0 if p[35] > 0 else 0.0
+    params["lfo2KeyReset"] = 1.0 if p[36] > 0 else 0.0
+
+    # Character & Voices
+    params["driveEnabled"] = 1.0 if p[37] > 0 else 0.0
+    params["driveAmount"] = clamp(p[38] / 128.0, 0.0, 1.0)
+    params["driveTone"] = clamp(p[39] / 128.0, 0.0, 1.0)
+    params["dualMode"] = 1.0 if p[40] > 0 else 0.0
+    params["velToFilter"] = clamp(p[41] / 128.0, 0.0, 1.0)
+    params["analogMode"] = 1.0 if p[42] > 0 else 0.0
+
+    # Mod Envelope
+    params["modAttack"] = scale_exponential_time(clamp(p[43] / 128.0, 0.0, 1.0), 0.001, 5.0)
+    params["modDecay"] = scale_exponential_time(clamp(p[44] / 128.0, 0.0, 1.0), 0.001, 10.0)
+    params["modAmount"] = clamp((p[45] / 128.0) * 2.0 - 1.0, -1.0, 1.0)
+
+    # Mod Destination Buttons (Tags 46..49)
+    if p[46] > 0:
+        params["modTarget"] = 0.0  # Filter
+    elif p[47] > 0 or p[48] > 0:
+        params["modTarget"] = 1.0  # Pitch
+    elif p[49] > 0:
+        params["modTarget"] = 2.0  # Pulse Width
+    else:
+        params["modTarget"] = 0.0
+
+    # Output & Delay
+    params["masterVolume"] = clamp(p[50] / 128.0, 0.0, 1.0)
+    params["lfo1Delay"] = clamp((p[52] / 128.0) * 5.0, 0.0, 5.0)
+    params["lfo2Delay"] = clamp((p[53] / 128.0) * 5.0, 0.0, 5.0)
+    params["velToAmp"] = clamp(p[54] / 128.0, 0.0, 1.0)
+    params["wNoiseMode"] = 1.0 if p[55] > 0 else 0.0
+
+    # Flags: Bit 0 or Bit 1 = envLink (AmpCoupleFltBtn)
+    if (flags & 0x01) or (flags & 0x02):
         params["envLink"] = 1.0
 
     preset = ParsedPreset(
@@ -607,28 +733,44 @@ def parse_native_wasp_chunk(
             pass
 
     # 2. Native FL Studio Wasp XT chunk (Delphi SaveRestoreState):
-    # 4-byte version (10..13) + 224 bytes (56 floats) + 1 byte flags = 229 bytes
+    # 4-byte version (10..13) + 224 bytes (56 dwords) + 1 byte flags = 229 bytes
     if len(chunk) >= 229:
         version = struct.unpack("<I", chunk[:4])[0]
         if 1 <= version <= 32:
-            floats = parse_float_block(chunk[4:4 + 224], "<")
-            if len(floats) == 56:
-                flags = chunk[4 + 224]
-                return [map_native_wasp_floats_to_preset(
-                    floats, p_name, f"FL Studio Wasp XT Native (State v{version})", filename, flags
+            uints = struct.unpack("<56I", chunk[4:4 + 224])
+            is_delphi = all(u <= 2048 for u in uints)
+            flags = chunk[4 + 224]
+            if is_delphi:
+                ints = struct.unpack("<56i", chunk[4:4 + 224])
+                return [map_delphi_wasp_integers_to_preset(
+                    ints, p_name, f"FL Studio Wasp XT Native (State v{version})", filename, flags
                 )]
+            else:
+                floats = parse_float_block(chunk[4:4 + 224], "<")
+                if len(floats) == 56:
+                    return [map_native_wasp_floats_to_preset(
+                        floats, p_name, f"FL Studio Wasp XT Native (State v{version})", filename, flags
+                    )]
 
-    # 3. Native FL Studio older version: 164 bytes (41 floats) or 208 bytes (52 floats)
+    # 3. Native FL Studio older version: 164 bytes (41 dwords) or 208 bytes (52 dwords)
     if len(chunk) >= 169:
         version = struct.unpack("<I", chunk[:4])[0]
         if 1 <= version <= 32:
-            num_floats = 52 if len(chunk) >= 213 else 41
-            floats = parse_float_block(chunk[4:4 + num_floats * 4], "<")
-            if len(floats) == num_floats:
-                flags = chunk[4 + num_floats * 4] if len(chunk) >= 4 + num_floats * 4 + 1 else 0
-                return [map_native_wasp_floats_to_preset(
-                    floats, p_name, f"FL Studio Wasp XT Native (State v{version})", filename, flags
+            num_dwords = 52 if len(chunk) >= 213 else 41
+            uints = struct.unpack(f"<{num_dwords}I", chunk[4:4 + num_dwords * 4])
+            is_delphi = all(u <= 2048 for u in uints)
+            flags = chunk[4 + num_dwords * 4] if len(chunk) >= 4 + num_dwords * 4 + 1 else 0
+            if is_delphi:
+                ints = struct.unpack(f"<{num_dwords}i", chunk[4:4 + num_dwords * 4])
+                return [map_delphi_wasp_integers_to_preset(
+                    ints, p_name, f"FL Studio Wasp XT Native (State v{version})", filename, flags
                 )]
+            else:
+                floats = parse_float_block(chunk[4:4 + num_dwords * 4], "<")
+                if len(floats) == num_dwords:
+                    return [map_native_wasp_floats_to_preset(
+                        floats, p_name, f"FL Studio Wasp XT Native (State v{version})", filename, flags
+                    )]
 
     # 4. Raw 55 or 56 floats at offset 0
     if len(chunk) >= 55 * 4:
@@ -829,11 +971,8 @@ def parse_flp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
                 except Exception:
                     pass
 
-            # Plugin Data events:
-            # 213 (0xD5) = PluginID.Data (Modern FL Studio 6..24+ native plugin state)
-            # 197 (0xC5) = FLP_PluginData (Ancient FL Studio)
-            # 212 = Wrapper data
-            elif cmd in (213, 197, 212):
+            # Note: 212 = Wrapper GUI settings, must NOT be parsed as plugin chunk
+            elif cmd in (213, 197):
                 is_wasp = (
                     "wasp" in current_plugin_name.lower() or
                     "wasp" in current_chan_name.lower() or
