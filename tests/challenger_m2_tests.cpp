@@ -334,9 +334,9 @@ static void test_adversarial_numerical_stress_and_denormals() {
 
     // 3. Steady-state decay to absolute zero
     filter.reset();
-    filter.processSample(1.0f, 1000.0, 0.5, bumbler::WaspFilterMode::LP24);
+    (void)filter.processSample(1.0f, 1000.0, 0.5, bumbler::WaspFilterMode::LP24);
     for (int i = 0; i < 20000; ++i) {
-        filter.processSample(0.0f, 1000.0, 0.5, bumbler::WaspFilterMode::LP24);
+        (void)filter.processSample(0.0f, 1000.0, 0.5, bumbler::WaspFilterMode::LP24);
     }
     float zeroCheck = filter.processSample(0.0f, 1000.0, 0.5, bumbler::WaspFilterMode::LP24);
     AUDITOR_ASSERT(std::abs(zeroCheck) == 0.0f, "Filter failed to flush denormals to exact zero");

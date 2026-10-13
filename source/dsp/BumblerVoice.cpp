@@ -269,8 +269,18 @@ void BumblerVoice::renderSample(float& outL, float& outR, const ParameterSnapsho
 }
 
 void BumblerVoice::renderBlockAccumulate(float* outL, float* outR, int numSamples, const ParameterSnapshot& params) noexcept {
+    if (!mActive && mStealSamplesRemaining <= 0) {
+        mLastOutL = 0.0f;
+        mLastOutR = 0.0f;
+        return;
+    }
     for (int i = 0; i < numSamples; ++i) {
         renderSample(outL[i], outR[i], params);
+        if (!mActive && mStealSamplesRemaining <= 0) {
+            mLastOutL = 0.0f;
+            mLastOutR = 0.0f;
+            break;
+        }
     }
 }
 

@@ -17,13 +17,19 @@ void BumblerLFO::reset() noexcept {
 }
 
 void BumblerLFO::setRate(float rateHz) noexcept {
-    mRateHz = std::clamp(rateHz, 0.01f, 30.0f);
-    updatePhaseIncrement();
+    const float clamped = std::clamp(rateHz, 0.01f, 30.0f);
+    if (clamped != mRateHz) {
+        mRateHz = clamped;
+        updatePhaseIncrement();
+    }
 }
 
 void BumblerLFO::setDelay(float delaySeconds) noexcept {
-    mDelaySeconds = std::clamp(delaySeconds, 0.0f, 5.0f);
-    mDelaySamplesTotal = static_cast<int>(mDelaySeconds * static_cast<float>(mSampleRate));
+    const float clamped = std::clamp(delaySeconds, 0.0f, 5.0f);
+    if (clamped != mDelaySeconds) {
+        mDelaySeconds = clamped;
+        mDelaySamplesTotal = static_cast<int>(mDelaySeconds * static_cast<float>(mSampleRate));
+    }
 }
 
 void BumblerLFO::setWaveform(LfoWaveform wave) noexcept {
@@ -35,16 +41,22 @@ void BumblerLFO::setWaveform(int waveIndex) noexcept {
 }
 
 void BumblerLFO::setTempoSync(bool syncEnabled, float syncDivisionIndex, float hostBpm) noexcept {
-    mTempoSync = syncEnabled;
-    mSyncDivision = syncDivisionIndex;
-    mHostBpm = (hostBpm > 20.0f && hostBpm < 400.0f) ? hostBpm : 120.0f;
-    updatePhaseIncrement();
+    const float validBpm = (std::isfinite(hostBpm) && hostBpm > 20.0f && hostBpm < 400.0f) ? hostBpm : 120.0f;
+    if (mTempoSync != syncEnabled || mSyncDivision != syncDivisionIndex || mHostBpm != validBpm) {
+        mTempoSync = syncEnabled;
+        mSyncDivision = syncDivisionIndex;
+        mHostBpm = validBpm;
+        updatePhaseIncrement();
+    }
 }
 
 void BumblerLFO::setTempo(float hostBpm) noexcept {
-    mHostBpm = (hostBpm > 20.0f && hostBpm < 400.0f) ? hostBpm : 120.0f;
-    if (mTempoSync) {
-        updatePhaseIncrement();
+    const float validBpm = (std::isfinite(hostBpm) && hostBpm > 20.0f && hostBpm < 400.0f) ? hostBpm : 120.0f;
+    if (mHostBpm != validBpm) {
+        mHostBpm = validBpm;
+        if (mTempoSync) {
+            updatePhaseIncrement();
+        }
     }
 }
 

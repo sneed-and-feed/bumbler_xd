@@ -89,8 +89,11 @@ public:
     }
 
     void update(float aSec, float dSec, float sLevel, float rSec, double sampleRate = 0.0) noexcept {
-        if (sampleRate > 100.0) {
+        if (sampleRate > 100.0 && sampleRate != mSampleRate) {
             mSampleRate = sampleRate;
+            mCachedAttack = -1.0f;
+            mCachedDecay = -1.0f;
+            mCachedRelease = -1.0f;
         }
         setParameters(aSec, dSec, sLevel, rSec);
     }
@@ -170,6 +173,8 @@ public:
         mValue = 0.0f;
         mIsAttacking = false;
         mIsActive = false;
+        mCachedAttack = -1.0f;
+        mCachedDecay = -1.0f;
     }
 
     void trigger() noexcept {
@@ -179,11 +184,21 @@ public:
     }
 
     void setParameters(float aSec, float dSec, float amount, double sampleRate = 0.0) noexcept {
-        if (sampleRate > 100.0) mSampleRate = sampleRate;
+        if (sampleRate > 100.0 && sampleRate != mSampleRate) {
+            mSampleRate = sampleRate;
+            mCachedAttack = -1.0f;
+            mCachedDecay = -1.0f;
+        }
         const float att = std::max(0.0005f, aSec);
+        if (std::abs(att - mCachedAttack) > 1.0e-5f) {
+            mCachedAttack = att;
+            mAttackRate = 1.0f / (att * static_cast<float>(mSampleRate));
+        }
         const float dec = std::max(0.001f, dSec);
-        mAttackRate = 1.0f / (att * static_cast<float>(mSampleRate));
-        mDecayCoeff = std::exp(-1.0f / (dec * static_cast<float>(mSampleRate) * 0.5f));
+        if (std::abs(dec - mCachedDecay) > 1.0e-5f) {
+            mCachedDecay = dec;
+            mDecayCoeff = std::exp(-1.0f / (dec * static_cast<float>(mSampleRate) * 0.5f));
+        }
         mAmount = std::clamp(amount, -1.0f, 1.0f);
     }
 
@@ -219,6 +234,8 @@ private:
     float mAmount { 0.0f };
     bool mIsAttacking { false };
     bool mIsActive { false };
+    float mCachedAttack { -1.0f };
+    float mCachedDecay { -1.0f };
 };
 
 /**

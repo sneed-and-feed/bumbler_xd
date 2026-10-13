@@ -6,7 +6,7 @@
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
 ![JUCE](https://img.shields.io/badge/JUCE-8.0.6-orange.svg)
 ![Build](https://img.shields.io/badge/Build-Passing-brightgreen.svg)
-![CTest](https://img.shields.io/badge/Tests-22%2F22%20Passed-success.svg)
+![CTest](https://img.shields.io/badge/Tests-23%2F23%20Passed-success.svg)
 ![Coverage](https://img.shields.io/badge/Tiers%201--5-400%2B%20Tests-success.svg)
 ![Formats](https://img.shields.io/badge/Formats-VST3%20%7C%20Standalone%20%7C%20CLI-purple.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
@@ -478,8 +478,8 @@ python scripts/package_release.py
 ```
 
 Generated release artifacts in `releases/`:
-- `releases/BUMBLER_XD-v1.0.5-Windows-x64.zip` (Full package: Standalone + VST3 + Documentation)
-- `releases/BUMBLER_XD-v1.0.5-VST3-Windows-x64.zip` (VST3-only plugin package)
+- `releases/BUMBLER_XD-v1.0.7-Windows-x64.zip` (Full package: Standalone + VST3 + Documentation)
+- `releases/BUMBLER_XD-v1.0.7-VST3-Windows-x64.zip` (VST3-only plugin package)
 - `releases/SHA256SUMS.txt` (GNU `sha256sum`-compatible cryptographic manifest)
 
 ---

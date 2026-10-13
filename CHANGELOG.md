@@ -33,10 +33,35 @@ Bumbler XD maintains strict API and DAW state recall stability commitments acros
 | **v1.0.4** | v1.0.4 (Context Menus, Dynamic Filter LCD Telemetry, Release Calibration) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
 | **v1.0.5** | v1.0.5 (Legacy Preset Importer, 15 Homage Presets, Docs Refactor) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
 | **v1.0.6** | v1.0.6 (QOL Drag-and-Drop Preset Migrator & GUI) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
+| **v1.0.7** | v1.0.7 (Real-Time Hot-Path Optimizations, State Recall Hardening & Async UI Coalescing) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
 
 ---
 
 ## Release History
+
+## [1.0.7] - 2026-10-13
+
+### Fixed
+- **Partial & Foreign-Tag XML State Recall Hardening (`source/plugin/PluginProcessor.cpp`):**
+  - Prevented partial `<PARAM>` XML chunks or XML chunks containing foreign child tags (with fewer than 55 `<PARAM>` nodes) from overwriting the internal APVTS `ValueTree` structure and dropping unspecified parameter nodes during `setStateInformation()`.
+  - Added strict validation for `id` and `value` attributes on `<PARAM>` nodes prior to range sanitization and host parameter notification.
+- **Multichannel Host Output Bus Safety & Playhead BPM Guard (`source/plugin/PluginProcessor.cpp`):**
+  - Explicitly cleared any auxiliary host output channels beyond stereo (`ch >= 2`) in `processBlock()` to prevent uninitialized buffer noise in multichannel host routing configurations.
+  - Added `std::isfinite()` validation on host playhead BPM queries in `PluginProcessor::processBlock()`, `BumblerVoice::setHostBpm()`, `BumblerVoiceManager::setHostBpm()`, and `BumblerLFO::setTempoSync()` / `setTempo()`.
+- **Voice De-Click Steal Crossfade Completion (`source/dsp/BumblerVoice.h`, `source/dsp/BumblerVoice.cpp`, `source/dsp/BumblerVoiceManager.cpp`):**
+  - Added `BumblerVoice::isStealing()` query and updated `BumblerVoiceManager::renderBlock()` so voices completing a 5ms Hann de-click steal crossfade are always rendered to completion, with immediate mid-block loop exit once both envelope release and steal crossfade finish.
+- **Native FL Studio `.fst` & Delphi Integer Chunk Decoding (`source/plugin/PresetMigrator.cpp`, `scripts/import_wasp_presets.py`):**
+  - Added decoding for native FL Studio Wasp XT `.fst` presets, chunk event `0xD5`, and 32-bit Delphi integer parameter chunks while ignoring Fruity Wrapper metadata event `212`.
+
+### Changed
+- **Real-Time DSP Hot-Path Optimizations (`source/dsp/BumblerEnvelopes.h`, `source/dsp/BumblerLFO.cpp`, `source/dsp/WaspFilter.cpp`):**
+  - Added attack/decay coefficient caching (`mCachedAttack`, `mCachedDecay`) and sample-rate change cache invalidation to `BumblerModEnvelope::setParameters()` and `BumblerADSR::update()`, eliminating per-sample `std::exp()` calls across active voices while remaining bit-identical.
+  - Added change-detection guards to `BumblerLFO::setRate()`, `setDelay()`, `setTempoSync()`, and `setTempo()`, avoiding redundant per-sample `updatePhaseIncrement()` divisions and `std::round()` calls when LFO parameters are unchanged.
+  - Hoisted `WaspFilterMode::DBL_NT` twin-notch `std::tan()` frequency pre-warping (`dblNtG1`, `dblNtG2`) out of the inner sample loop in `WaspFilter::processBlock()`.
+- **Lock-Free Atomic Coalescing of Editor LCD Updates (`source/plugin/PluginEditor.h`, `source/plugin/PluginEditor.cpp`):**
+  - Added `std::atomic<bool> mLcdUpdatePending` compare-and-exchange coalescing in `BumblerAudioProcessorEditor::parameterChanged()` to prevent message-queue flooding under rapid multi-threaded host automation while preserving `SafePointer` teardown safety.
+- **Zero-Warning `/W4` Test Suite Compilation (`tests/`):**
+  - Resolved all remaining MSVC `/W4` `C4834` (`[[nodiscard]]`) and `C4189` (unused variable) warnings across all 23 CTest executables.
 
 ## [1.0.6] - 2026-09-25
 

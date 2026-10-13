@@ -83,11 +83,17 @@ BumblerAudioProcessorEditor::~BumblerAudioProcessorEditor() {
 
 void BumblerAudioProcessorEditor::parameterChanged(const juce::String&, float) {
     // Coalesce updates to message thread with SafePointer to prevent use-after-free on editor close
-    juce::Component::SafePointer<BumblerAudioProcessorEditor> safeThis(this);
-    juce::MessageManager::callAsync([safeThis]() {
-        if (safeThis != nullptr)
-            safeThis->updateLcdDisplays();
-    });
+    // and avoid flooding the OS/JUCE message queue under rapid multi-threaded parameter automation
+    bool expected = false;
+    if (mLcdUpdatePending.compare_exchange_strong(expected, true, std::memory_order_acq_rel)) {
+        juce::Component::SafePointer<BumblerAudioProcessorEditor> safeThis(this);
+        juce::MessageManager::callAsync([safeThis]() {
+            if (safeThis != nullptr) {
+                safeThis->mLcdUpdatePending.store(false, std::memory_order_release);
+                safeThis->updateLcdDisplays();
+            }
+        });
+    }
 }
 
 void BumblerAudioProcessorEditor::updateLcdDisplays() {

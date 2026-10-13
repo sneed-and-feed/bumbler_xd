@@ -109,6 +109,15 @@ void WaspFilter::processBlock(
     const double targetG = std::tan(bumbler::kPi * fc / mSampleRate);
     const double targetK = 2.0 - 1.9 * reso;
 
+    double dblNtG1 = 0.0;
+    double dblNtG2 = 0.0;
+    if (mode == WaspFilterMode::DBL_NT) {
+        const double fc1 = std::clamp(fc * 0.7071067811865475, 20.0, 0.48 * mSampleRate);
+        const double fc2 = std::clamp(fc * 1.4142135623730951, 20.0, 0.48 * mSampleRate);
+        dblNtG1 = std::tan(bumbler::kPi * fc1 / mSampleRate);
+        dblNtG2 = std::tan(bumbler::kPi * fc2 / mSampleRate);
+    }
+
     if (mFirstBlock) {
         mCurrentG = targetG;
         mCurrentK = targetK;
@@ -149,12 +158,8 @@ void WaspFilter::processBlock(
                     break;
                 }
                 case WaspFilterMode::DBL_NT: {
-                    const double fc1 = std::clamp(fc * 0.7071067811865475, 20.0, 0.48 * mSampleRate);
-                    const double fc2 = std::clamp(fc * 1.4142135623730951, 20.0, 0.48 * mSampleRate);
-                    const double g1 = std::tan(bumbler::kPi * fc1 / mSampleRate);
-                    const double g2 = std::tan(bumbler::kPi * fc2 / mSampleRate);
-                    mStage1.step(inD, g1, mCurrentK, lp1, bp1, hp1, nt1);
-                    mStage2.step(nt1, g2, mCurrentK, lp2, bp2, hp2, nt2);
+                    mStage1.step(inD, dblNtG1, mCurrentK, lp1, bp1, hp1, nt1);
+                    mStage2.step(nt1, dblNtG2, mCurrentK, lp2, bp2, hp2, nt2);
                     outVal = static_cast<float>(nt2);
                     break;
                 }

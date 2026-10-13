@@ -103,6 +103,7 @@ private:
     bool         mToastIsError { false };
     float        mToastAlpha { 0.0f };
     int          mToastCountdown { 0 };
+    std::atomic<bool> mLcdUpdatePending { false };
 
     struct UserPresetItem {
         juce::String name;

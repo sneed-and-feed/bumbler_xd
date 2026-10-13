@@ -112,8 +112,8 @@ python scripts/package_release.py
 ```
 
 All packaged files are staged into the `releases/` directory:
-- `releases/BUMBLER_XD-v1.0.5-Windows-x64.zip` (Full distribution package)
-- `releases/BUMBLER_XD-v1.0.5-VST3-Windows-x64.zip` (VST3-only package)
+- `releases/BUMBLER_XD-v1.0.7-Windows-x64.zip` (Full distribution package)
+- `releases/BUMBLER_XD-v1.0.7-VST3-Windows-x64.zip` (VST3-only package)
 - `releases/SHA256SUMS.txt` (Cryptographic checksum manifest)
 
 ---

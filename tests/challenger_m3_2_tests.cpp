@@ -613,7 +613,6 @@ static void test_mod_env_bipolar_sweeping() {
         auto measurePeriod = [&](float extPitch) -> double {
             oscSection.reset(false);
             std::vector<double> wraps;
-            float prevPhase = 0.0f;
             for (int i = 0; i < 3000; ++i) {
                 (void)oscSection.process(440.0f, params, 0.0f, 0.0f, extPitch);
                 // Last OSC 2 is sine, we can track upward zero crossings

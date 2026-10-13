@@ -495,7 +495,7 @@ bool testXmlChunkFuzzing(bumbler::BumblerAudioProcessor& proc) {
     std::cout << "[CHALLENGE 4] Deep XML Chunk Fuzzing & Corrupt State Defensive Recovery...\n";
     std::cout << "======================================================================\n" << std::flush;
 
-    constexpr int kFuzzIterations = 2000;
+    [[maybe_unused]] constexpr int kFuzzIterations = 2000;
     std::mt19937 rng(9999);
 
     // 4.1: Edge case pointers and sizes

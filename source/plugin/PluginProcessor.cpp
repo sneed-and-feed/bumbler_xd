@@ -38,7 +38,10 @@ void BumblerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     if (auto* ph = getPlayHead()) {
         if (auto position = ph->getPosition()) {
             if (position->getBpm().hasValue()) {
-                mEngine.setHostBpm(static_cast<float>(*position->getBpm()));
+                const double hostBpm = *position->getBpm();
+                if (std::isfinite(hostBpm)) {
+                    mEngine.setHostBpm(static_cast<float>(hostBpm));
+                }
             }
         }
     }
@@ -91,6 +94,11 @@ void BumblerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
     float* const* channels = buffer.getArrayOfWritePointers();
 
     mEngine.renderBlock(channels, numChannels, numSamples, snapshot);
+
+    // Clear any extra host output channels beyond stereo (channels 2+)
+    for (int ch = 2; ch < numChannels; ++ch) {
+        buffer.clear(ch, 0, numSamples);
+    }
 }
 
 // ============================================================================
@@ -269,19 +277,25 @@ void BumblerAudioProcessor::setStateInformation(const void* data, int sizeInByte
         return;
 
     // Defensive NaN/Inf & range sanitization on every restored parameter node
+    int validParamCount = 0;
     for (int i = 0; i < vt.getNumChildren(); ++i) {
         auto child = vt.getChild(i);
-        if (child.hasType("PARAM")) {
+        if (child.hasType("PARAM") && child.hasProperty("id") && child.hasProperty("value")) {
             const auto paramId = child.getProperty("id").toString();
             if (auto* rParam = mApvts.getParameter(paramId)) {
+                ++validParamCount;
                 float val = static_cast<float>(child.getProperty("value"));
                 const auto range = mApvts.getParameterRange(paramId);
                 if (std::isnan(val) || std::isinf(val)) {
                     val = range.convertFrom0to1(rParam->getDefaultValue());
                     child.setProperty("value", val, nullptr);
+                    rParam->setValueNotifyingHost(rParam->getDefaultValue());
                 } else if (val < range.start || val > range.end) {
                     val = juce::jlimit(range.start, range.end, val);
                     child.setProperty("value", val, nullptr);
+                    rParam->setValueNotifyingHost(range.convertTo0to1(val));
+                } else {
+                    rParam->setValueNotifyingHost(range.convertTo0to1(val));
                 }
             }
         }
@@ -309,7 +323,7 @@ void BumblerAudioProcessor::setStateInformation(const void* data, int sizeInByte
         }
     }
 
-    if (vt.getNumChildren() > 0) {
+    if (validParamCount >= 55) {
         mApvts.replaceState(vt);
     }
 

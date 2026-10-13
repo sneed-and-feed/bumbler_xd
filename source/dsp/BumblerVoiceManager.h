@@ -93,7 +93,7 @@ public:
 
     // Host Tempo Dispatch (BPM)
     void setHostBpm(float bpm) noexcept {
-        mHostBpm = (bpm > 20.0f && bpm < 400.0f) ? bpm : 120.0f;
+        mHostBpm = (std::isfinite(bpm) && bpm > 20.0f && bpm < 400.0f) ? bpm : 120.0f;
         for (auto& v : mVoices) {
             v.setHostBpm(mHostBpm);
         }

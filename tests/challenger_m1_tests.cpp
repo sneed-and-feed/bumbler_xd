@@ -170,7 +170,7 @@ static SpectralAliasingResult analyzeAntiAliasing(
 
     // Warm-up transient (500 samples)
     for (int i = 0; i < 500; ++i) {
-        osc.processSample(0.0f);
+        (void)osc.processSample(0.0f);
     }
 
     // Capture fftSize samples

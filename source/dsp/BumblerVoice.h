@@ -31,6 +31,7 @@ public:
 
     // State Queries
     [[nodiscard]] bool isActive() const noexcept { return mActive; }
+    [[nodiscard]] bool isStealing() const noexcept { return mStealSamplesRemaining > 0; }
     [[nodiscard]] bool isHeld() const noexcept { return mIsHeld; }
     [[nodiscard]] bool isReleasing() const noexcept {
         return mActive && (mDualEnvelopes.getAmpEnv().getState() == BumblerADSR::State::Release);
@@ -46,7 +47,7 @@ public:
 
     void setPitchBend(float semitones) noexcept { mPitchBendSemitones = semitones; }
     void setHostBpm(float bpm) noexcept {
-        mHostBpm = (bpm > 20.0f && bpm < 400.0f) ? bpm : 120.0f;
+        mHostBpm = (std::isfinite(bpm) && bpm > 20.0f && bpm < 400.0f) ? bpm : 120.0f;
         mLfo1.setTempo(mHostBpm);
         mLfo2.setTempo(mHostBpm);
     }

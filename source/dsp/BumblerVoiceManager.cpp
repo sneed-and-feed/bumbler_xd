@@ -213,7 +213,7 @@ void BumblerVoiceManager::renderBlock(float* const* outputChannels, int numChann
 
             for (int i = 0; i < mMaxPolyphony; ++i) {
                 auto& v = mVoices[static_cast<size_t>(i)];
-                if (v.isActive()) {
+                if (v.isActive() || v.isStealing()) {
                     v.renderBlockAccumulate(chunkOutM, scratchR, chunkSize, params);
                 }
             }
@@ -242,7 +242,7 @@ void BumblerVoiceManager::renderBlock(float* const* outputChannels, int numChann
     // Render and accumulate active voices directly into the destination buffers
     for (int i = 0; i < mMaxPolyphony; ++i) {
         auto& v = mVoices[static_cast<size_t>(i)];
-        if (v.isActive()) {
+        if (v.isActive() || v.isStealing()) {
             v.renderBlockAccumulate(outL, outR, numSamples, params);
         }
     }
