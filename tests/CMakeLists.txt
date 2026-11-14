@@ -316,6 +316,7 @@ target_include_directories(bumbler_v110_regression_tests PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../source/plugin
     ${CMAKE_CURRENT_SOURCE_DIR}/../source/ui
 )
+target_compile_definitions(bumbler_v110_regression_tests PRIVATE JUCE_MODAL_LOOPS_PERMITTED=1)
 if(MSVC)
     target_compile_definitions(bumbler_v110_regression_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_compile_options(bumbler_v110_regression_tests PRIVATE /utf-8 /W4 /O2 /fp:precise)

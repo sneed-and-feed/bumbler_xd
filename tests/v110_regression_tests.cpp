@@ -22,31 +22,15 @@
 #include <cstring>
 #include <cstdint>
 #include <chrono>
-#include <thread>
 
-#if defined(_WIN32) || defined(_WIN64)
-#ifndef NOMINMAX
-#define NOMINMAX
-#endif
-#include <windows.h>
 static void pumpPendingGuiMessages(int milliseconds) {
-    const auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(milliseconds);
-    do {
-        MSG msg;
-        int processed = 0;
-        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) && processed < 2000) {
-            TranslateMessage(&msg);
-            DispatchMessage(&msg);
-            ++processed;
-        }
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    } while (std::chrono::steady_clock::now() < end);
+    if (auto* mm = juce::MessageManager::getInstanceWithoutCreating()) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(milliseconds);
+        do {
+            (void)mm->runDispatchLoopUntil(10);
+        } while (std::chrono::steady_clock::now() < deadline);
+    }
 }
-#else
-static void pumpPendingGuiMessages(int milliseconds) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(milliseconds));
-}
-#endif
 
 using namespace bumbler;
 
