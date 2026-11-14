@@ -162,6 +162,19 @@ juce_add_plugin(BumblerXD
     PRODUCT_NAME "Bumbler XD"
 )
 
+# Work around JUCE 8 _juce_create_windows_resource_file omitting Info.txt/CMakeLists.txt
+# from BumblerXD_resources.rc custom-command dependencies across incremental version bumps.
+if(WIN32)
+    set(_bumbler_info_file "${CMAKE_CURRENT_BINARY_DIR}/BumblerXD_artefacts/JuceLibraryCode/Info.txt")
+    set(_bumbler_rc_file "${CMAKE_CURRENT_BINARY_DIR}/BumblerXD_artefacts/JuceLibraryCode/BumblerXD_resources.rc")
+    add_custom_command(OUTPUT "${_bumbler_rc_file}" APPEND
+        DEPENDS "${_bumbler_info_file}" "${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt"
+    )
+    set_source_files_properties("${_bumbler_rc_file}" PROPERTIES
+        OBJECT_DEPENDS "${_bumbler_info_file};${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt"
+    )
+endif()
+
 # Plugin processor and editor sources
 target_sources(BumblerXD PRIVATE
     source/plugin/Parameters.h

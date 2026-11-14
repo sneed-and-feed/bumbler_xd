@@ -228,6 +228,7 @@ void BumblerAudioProcessor::loadPreset(int index) {
 
     mCurrentProgramIndex.store(index, std::memory_order_relaxed);
     applyParameterSnapshot(presets[static_cast<size_t>(index)].params);
+    sendChangeMessage();
 }
 
 void BumblerAudioProcessor::loadHomagePreset(int index) {
@@ -237,11 +238,13 @@ void BumblerAudioProcessor::loadHomagePreset(int index) {
 
     mCurrentProgramIndex.store(5 + index, std::memory_order_relaxed);
     applyParameterSnapshot(presets[static_cast<size_t>(index)].params);
+    sendChangeMessage();
 }
 
 void BumblerAudioProcessor::loadMigratedSnapshot(const ParameterSnapshot& p) {
     mCurrentProgramIndex.store(-1, std::memory_order_relaxed);
     applyParameterSnapshot(p);
+    sendChangeMessage();
 }
 
 bool BumblerAudioProcessor::loadXmlPresetFile(const juce::File& xmlFile) {
@@ -346,10 +349,12 @@ void BumblerAudioProcessor::setStateInformation(const void* data, int sizeInByte
     if (vt.hasProperty("programIndex")) {
         const int pIdx = static_cast<int>(vt.getProperty("programIndex"));
         const int totalBuiltInPresets = getNumPrograms() + static_cast<int>(getMigratedPresets().size());
-        if (pIdx >= 0 && pIdx < totalBuiltInPresets) {
+        if (pIdx >= -1 && pIdx < totalBuiltInPresets) {
             mCurrentProgramIndex.store(pIdx, std::memory_order_relaxed);
         }
     }
+
+    sendChangeMessage();
 }
 
 juce::AudioProcessorEditor* BumblerAudioProcessor::createEditor() {

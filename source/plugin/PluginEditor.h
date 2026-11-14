@@ -15,6 +15,7 @@ class BumblerAudioProcessor;
 
 class BumblerAudioProcessorEditor : public juce::AudioProcessorEditor,
                                     public juce::AudioProcessorValueTreeState::Listener,
+                                    public juce::ChangeListener,
                                     public juce::FileDragAndDropTarget,
                                     public juce::Timer {
 public:
@@ -27,6 +28,7 @@ public:
     void mouseDown(const juce::MouseEvent& e) override;
 
     void parameterChanged(const juce::String& parameterID, float newValue) override;
+    void changeListenerCallback(juce::ChangeBroadcaster* source) override;
 
     // juce::FileDragAndDropTarget interface
     bool isInterestedInFileDrag(const juce::StringArray& files) override;
@@ -67,6 +69,7 @@ public:
 
 private:
     void setupUI();
+    void syncPresetComboSelection();
     void updateLcdDisplays();
 
     void addKnob(const juce::ParameterID& paramId, const char* name,

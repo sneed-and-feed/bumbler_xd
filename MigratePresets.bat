@@ -17,37 +17,40 @@ if not exist "%SCRIPT_PATH%" (
     exit /b 1
 )
 
-rem 1. Attempt to launch silently via pythonw (avoids persistent command window)
-where pythonw >nul 2>&1
+rem 1. Prefer the official Windows Python Launcher ('py') after verifying Tkinter
+rem    (bypasses Microsoft Store WindowsApps python/pythonw execution alias stubs)
+py -3 -c "import tkinter" >nul 2>&1
 if %ERRORLEVEL% equ 0 (
-    start "" pythonw "%SCRIPT_PATH%" %*
-    exit /b 0
-)
-
-rem 2. Fallback to standard python interpreter
-where python >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    python "%SCRIPT_PATH%" %*
-    exit /b %ERRORLEVEL%
-)
-
-rem 3. Fallback to Windows Python Launcher 'py'
-where py >nul 2>&1
-if %ERRORLEVEL% equ 0 (
-    start "" py -3w "%SCRIPT_PATH%" %* 2>nul
-    if %ERRORLEVEL% equ 0 exit /b 0
+    py -3w -c "import sys" >nul 2>&1
+    if !ERRORLEVEL! equ 0 (
+        start "" py -3w "%SCRIPT_PATH%" %*
+        exit /b 0
+    )
     py -3 "%SCRIPT_PATH%" %*
-    exit /b %ERRORLEVEL%
+    exit /b !ERRORLEVEL!
 )
 
-rem 4. Error notification if no Python environment is detected
+rem 2. Fallback to PATH python/pythonw ONLY after verifying a real interpreter + Tkinter
+python -c "import tkinter" >nul 2>&1
+if %ERRORLEVEL% equ 0 (
+    pythonw -c "import tkinter" >nul 2>&1
+    if !ERRORLEVEL! equ 0 (
+        start "" pythonw "%SCRIPT_PATH%" %*
+        exit /b 0
+    )
+    python "%SCRIPT_PATH%" %*
+    exit /b !ERRORLEVEL!
+)
+
+rem 3. Error notification if no usable Python + Tkinter environment is detected
 echo ===========================================================================
-echo [ERROR] Python was not found in your system PATH.
+echo [ERROR] Python 3.9+ with Tkinter was not found on your system.
 echo ===========================================================================
-echo Bumbler XD Preset Migrator requires Python 3.9+ with Tkinter support.
+echo Bumbler XD Preset Migrator requires a real Python 3.9+ installation with
+echo Tcl/Tk (Tkinter) GUI support enabled.
 echo.
 echo Please install Python from https://www.python.org/downloads/
-echo Ensure the option "Add Python to PATH" is selected during installation.
+echo Ensure "tcl/tk and IDLE" and "py launcher" (or "Add Python to PATH") are selected.
 echo.
 pause
 exit /b 1

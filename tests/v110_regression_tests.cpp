@@ -243,6 +243,54 @@ bool testMidiPanicSustainPedalAllSoundOffAndResetControllers() {
     V110_ASSERT(proc.getEngine().getVoiceManager().getNumActiveVoices() == 0,
                 "CC 121 releases sustain latch and resets pitch bend");
 
+    // Verify CC 64 pedal-latched NoteOff clears mIsHeld=false and steals pedal-latched arpeggio voices
+    // BEFORE stealing a physically held left-hand bass root
+    {
+        BumblerVoiceManager stealVm;
+        stealVm.prepare(48000.0, 128);
+        stealVm.setSustainPedal(true);
+
+        // Hold left-hand bass C2 (MIDI 36) physically down (triggerSample = 1)
+        stealVm.noteOn(36, 0.9f);
+        int bassVoiceIdx = -1;
+        for (int i = 0; i < BumblerVoiceManager::kMaxVoices; ++i) {
+            if (stealVm.getVoice(i).isActive() && stealVm.getVoice(i).getMidiNote() == 36) {
+                bassVoiceIdx = i;
+                break;
+            }
+        }
+        V110_ASSERT(bassVoiceIdx >= 0, "Allocated bass root voice on MIDI 36");
+        V110_ASSERT(stealVm.getVoice(bassVoiceIdx).isHeld() && !stealVm.getVoice(bassVoiceIdx).isPedalLatched(),
+                    "Physically held bass root has isHeld()==true, isPedalLatched()==false");
+
+        // Play and release 15 right-hand arpeggio notes (MIDI 60..74) while sustain pedal is down
+        for (int n = 60; n < 75; ++n) {
+            stealVm.noteOn(n, 0.8f);
+            stealVm.noteOff(n, 0.0f);
+        }
+        V110_ASSERT(stealVm.getNumActiveVoices() == 16, "All 16 voices active (1 physically held + 15 pedal-latched)");
+
+        int firstArpIdx = -1;
+        for (int i = 0; i < BumblerVoiceManager::kMaxVoices; ++i) {
+            if (stealVm.getVoice(i).isActive() && stealVm.getVoice(i).getMidiNote() == 60) {
+                firstArpIdx = i;
+                break;
+            }
+        }
+        V110_ASSERT(firstArpIdx >= 0, "Found first pedal-latched arpeggio voice (MIDI 60)");
+        V110_ASSERT(!stealVm.getVoice(firstArpIdx).isHeld() && stealVm.getVoice(firstArpIdx).isPedalLatched(),
+                    "Released CC 64 voice clears isHeld()==false and sets isPedalLatched()==true");
+
+        // Trigger 17th note (MIDI 75): must steal oldest pedal-latched voice (MIDI 60), NOT held bass root (MIDI 36)!
+        stealVm.noteOn(75, 0.85f);
+        V110_ASSERT(stealVm.getVoice(bassVoiceIdx).isActive()
+                        && stealVm.getVoice(bassVoiceIdx).getMidiNote() == 36
+                        && stealVm.getVoice(bassVoiceIdx).isHeld(),
+                    "Physically held bass root (MIDI 36) protected from pedal-latched voice stealing");
+        V110_ASSERT(stealVm.getVoice(firstArpIdx).getMidiNote() == 75,
+                    "Oldest pedal-latched released voice (MIDI 60) stolen first for MIDI 75");
+    }
+
     return true;
 }
 
@@ -601,7 +649,20 @@ bool testHomagePresetStateRecallBusLayoutsAndUiBounds() {
     procB.setStateInformation(stateData.getData(), static_cast<int>(stateData.getSize()));
     V110_ASSERT(procB.getCurrentProgram() == 12, "Homage preset programIndex 12 survives DAW state save/reload");
 
-    // Verify out-of-range programIndex (-1 and 20) in state XML are rejected
+    // Verify custom/migrated programIndex == -1 survives DAW state save/reload on a fresh processor
+    procA.loadMigratedSnapshot(getFactoryPresets()[0].params);
+    V110_ASSERT(procA.getCurrentProgram() == -1, "loadMigratedSnapshot sets programIndex = -1");
+    juce::MemoryBlock migratedState;
+    procA.getStateInformation(migratedState);
+
+    BumblerAudioProcessor procMigratedReload;
+    procMigratedReload.prepareToPlay(48000.0, 128);
+    V110_ASSERT(procMigratedReload.getCurrentProgram() == 0, "Fresh processor starts at program 0");
+    procMigratedReload.setStateInformation(migratedState.getData(), static_cast<int>(migratedState.getSize()));
+    V110_ASSERT(procMigratedReload.getCurrentProgram() == -1,
+                "Custom/migrated programIndex == -1 survives setStateInformation on fresh processor");
+
+    // Verify out-of-range programIndex (-2 and 20) in state XML are rejected
     if (auto xml = juce::AudioProcessor::getXmlFromBinary(stateData.getData(), static_cast<int>(stateData.getSize()))) {
         xml->setAttribute("programIndex", 20);
         juce::MemoryBlock badBlock;
@@ -609,6 +670,12 @@ bool testHomagePresetStateRecallBusLayoutsAndUiBounds() {
         procB.setCurrentProgram(2);
         procB.setStateInformation(badBlock.getData(), static_cast<int>(badBlock.getSize()));
         V110_ASSERT(procB.getCurrentProgram() == 2, "Out-of-range programIndex=20 rejected safely");
+
+        xml->setAttribute("programIndex", -2);
+        juce::MemoryBlock negBlock;
+        juce::AudioProcessor::copyXmlToBinary(*xml, negBlock);
+        procB.setStateInformation(negBlock.getData(), static_cast<int>(negBlock.getSize()));
+        V110_ASSERT(procB.getCurrentProgram() == 2, "Out-of-range programIndex=-2 rejected safely");
     }
 
     // 0-sample block and 6-channel buffer clearing
@@ -645,7 +712,8 @@ bool testHomagePresetStateRecallBusLayoutsAndUiBounds() {
                     "LCD NaN parameters sanitized cleanly inside bezel");
     }
 
-    // Editor mPresetComboBox syncs when processor loads Homage Preset externally
+    // Editor mPresetComboBox syncs when processor loads Homage Preset externally,
+    // AND when switching between presets with identical ADSR/cutoff values (zero parameterChanged events)
     std::unique_ptr<juce::AudioProcessorEditor> rawEd(procB.createEditor());
     auto* ed = dynamic_cast<BumblerAudioProcessorEditor*>(rawEd.get());
     V110_ASSERT(ed != nullptr, "Created BumblerAudioProcessorEditor");
@@ -653,6 +721,30 @@ bool testHomagePresetStateRecallBusLayoutsAndUiBounds() {
     pumpPendingGuiMessages(25);
     V110_ASSERT(ed->getSelectedPresetComboId() == 9,
                 "Editor mPresetComboBox synced to ID 9 after external loadHomagePreset(3)");
+
+    // Load Factory Preset 0 (Acid Bass -> ComboBox ID = 1)
+    procB.loadPreset(0);
+    pumpPendingGuiMessages(25);
+    V110_ASSERT(ed->getSelectedPresetComboId() == 1,
+                "Editor mPresetComboBox synced to ID 1 after loadPreset(0)");
+
+    // Load migrated snapshot with IDENTICAL 55 parameters to Acid Bass (fires zero parameterChanged callbacks!)
+    procB.loadMigratedSnapshot(getFactoryPresets()[0].params);
+    pumpPendingGuiMessages(25);
+    V110_ASSERT(ed->getSelectedPresetComboId() == 0,
+                "Editor mPresetComboBox cleared to ID 0 via ChangeBroadcaster even with identical ADSR/cutoff");
+
+    // Switch back to Factory Preset 0 (still identical 55 parameters -> zero parameterChanged callbacks!)
+    procB.loadPreset(0);
+    pumpPendingGuiMessages(25);
+    V110_ASSERT(ed->getSelectedPresetComboId() == 1,
+                "Editor mPresetComboBox restored to ID 1 via ChangeBroadcaster on identical-param loadPreset(0)");
+
+    // Restore migrated state (-1) via setStateInformation -> clears mPresetComboBox to ID 0
+    procB.setStateInformation(migratedState.getData(), static_cast<int>(migratedState.getSize()));
+    pumpPendingGuiMessages(25);
+    V110_ASSERT(ed->getSelectedPresetComboId() == 0,
+                "Editor mPresetComboBox synced to ID 0 after setStateInformation with programIndex=-1");
 
     return true;
 }

@@ -538,15 +538,20 @@ bool runSchemaAndPartialStateChallenge(bumbler::BumblerAudioProcessor& proc) {
     proc.setStateInformation(prog3Xml.data(), static_cast<int>(prog3Xml.size()));
     CHALLENGE_ASSERT(proc.getCurrentProgram() == 3, "Valid programIndex 3 not restored");
 
-    // Invalid programIndex = 99 (must not exceed getNumPrograms() - 1 = 4)
+    // Invalid programIndex = 99 (must not exceed built-in preset upper bound 19)
     const std::string prog99Xml = "<Parameters schemaVersion=\"1\" programIndex=\"99\"><PARAM id=\"filterCutoff\" value=\"850.0\"/></Parameters>";
     proc.setStateInformation(prog99Xml.data(), static_cast<int>(prog99Xml.size()));
     CHALLENGE_ASSERT(proc.getCurrentProgram() == 3, "Out-of-range programIndex 99 was improperly accepted");
 
-    // Invalid programIndex = -1
-    const std::string progNegXml = "<Parameters schemaVersion=\"1\" programIndex=\"-1\"><PARAM id=\"filterCutoff\" value=\"850.0\"/></Parameters>";
-    proc.setStateInformation(progNegXml.data(), static_cast<int>(progNegXml.size()));
-    CHALLENGE_ASSERT(proc.getCurrentProgram() == 3, "Negative programIndex -1 was improperly accepted");
+    // Invalid programIndex = -2 (below custom/migrated sentinel -1)
+    const std::string progNeg2Xml = "<Parameters schemaVersion=\"1\" programIndex=\"-2\"><PARAM id=\"filterCutoff\" value=\"850.0\"/></Parameters>";
+    proc.setStateInformation(progNeg2Xml.data(), static_cast<int>(progNeg2Xml.size()));
+    CHALLENGE_ASSERT(proc.getCurrentProgram() == 3, "Out-of-range negative programIndex -2 was improperly accepted");
+
+    // Valid custom/migrated sentinel programIndex = -1
+    const std::string progCustomXml = "<Parameters schemaVersion=\"1\" programIndex=\"-1\"><PARAM id=\"filterCutoff\" value=\"850.0\"/></Parameters>";
+    proc.setStateInformation(progCustomXml.data(), static_cast<int>(progCustomXml.size()));
+    CHALLENGE_ASSERT(proc.getCurrentProgram() == -1, "Custom/migrated programIndex -1 not restored");
 
     std::cout << "  -> PASS: Partial states, forward schema compatibility, and program index bounds verified.\n";
     ++gTestsPassed;

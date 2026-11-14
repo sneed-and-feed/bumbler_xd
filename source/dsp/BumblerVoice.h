@@ -34,6 +34,7 @@ public:
     [[nodiscard]] bool isActive() const noexcept { return mActive; }
     [[nodiscard]] bool isStealing() const noexcept { return mStealSamplesRemaining > 0; }
     [[nodiscard]] bool isHeld() const noexcept { return mIsHeld; }
+    void setHeld(bool held) noexcept { mIsHeld = held; }
     [[nodiscard]] bool isReleasing() const noexcept {
         return mActive && (mDualEnvelopes.getAmpEnv().getState() == BumblerADSR::State::Release);
     }

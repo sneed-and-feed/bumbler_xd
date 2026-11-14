@@ -1,5 +1,7 @@
+import ctypes
 import hashlib
 import os
+import sys
 import zipfile
 from pathlib import Path
 
@@ -9,6 +11,48 @@ build_dir = os.path.join(root_dir, "build", "BumblerXD_artefacts", "Release")
 
 os.makedirs(release_dir, exist_ok=True)
 version = "1.1.0"
+
+
+def verify_windows_pe_version(pe_path: str, expected_version: str) -> None:
+    if not os.path.isfile(pe_path):
+        raise FileNotFoundError(f"Missing expected binary: {pe_path}")
+    if sys.platform != "win32":
+        return
+
+    ver_dll = ctypes.windll.version
+    dummy = ctypes.c_ulong(0)
+    size = ver_dll.GetFileVersionInfoSizeW(pe_path, ctypes.byref(dummy))
+    if size <= 0:
+        raise RuntimeError(f"Missing VERSIONINFO resource in {pe_path}")
+
+    buf = ctypes.create_string_buffer(size)
+    if not ver_dll.GetFileVersionInfoW(pe_path, 0, size, buf):
+        raise RuntimeError(f"GetFileVersionInfoW failed for {pe_path}")
+
+    def query_string(field: str) -> str:
+        ptr = ctypes.c_void_p()
+        length = ctypes.c_uint(0)
+        sub_block = f"\\StringFileInfo\\040904E4\\{field}"
+        if not ver_dll.VerQueryValueW(buf, sub_block, ctypes.byref(ptr), ctypes.byref(length)) or not ptr.value:
+            raise RuntimeError(f"Missing VERSIONINFO field '{field}' in {pe_path}")
+        return ctypes.wstring_at(ptr.value).rstrip("\x00").strip()
+
+    file_ver = query_string("FileVersion")
+    prod_ver = query_string("ProductVersion")
+    if file_ver != expected_version or prod_ver != expected_version:
+        raise RuntimeError(
+            f"Stale PE VERSIONINFO in {pe_path}: FileVersion='{file_ver}', "
+            f"ProductVersion='{prod_ver}' (expected '{expected_version}')"
+        )
+    print(f"Verified PE VERSIONINFO ({os.path.basename(pe_path)}): FileVersion={file_ver}, ProductVersion={prod_ver}")
+
+
+vst3_dir = os.path.join(build_dir, "VST3", "Bumbler XD.vst3")
+vst3_binary = os.path.join(vst3_dir, "Contents", "x86_64-win", "Bumbler XD.vst3")
+standalone_file = os.path.join(build_dir, "Standalone", "Bumbler XD.exe")
+
+verify_windows_pe_version(standalone_file, version)
+verify_windows_pe_version(vst3_binary, version)
 
 full_zip_name = f"BUMBLER_XD-v{version}-Windows-x64.zip"
 vst3_zip_name = f"BUMBLER_XD-v{version}-VST3-Windows-x64.zip"
@@ -24,13 +68,12 @@ for existing in os.listdir(release_dir):
 # 1. Package Windows-x64 full zip (Standalone + VST3 + docs + migrator)
 zip_path = os.path.join(release_dir, full_zip_name)
 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-    vst3_dir = os.path.join(build_dir, "VST3", "Bumbler XD.vst3")
     for root, dirs, files in os.walk(vst3_dir):
+        dirs.sort()
         for f in sorted(files):
             full = os.path.join(root, f)
             rel = os.path.relpath(full, os.path.join(build_dir, "VST3"))
             zf.write(full, rel)
-    standalone_file = os.path.join(build_dir, "Standalone", "Bumbler XD.exe")
     if os.path.exists(standalone_file):
         zf.write(standalone_file, "Bumbler XD.exe")
     if os.path.exists(os.path.join(root_dir, "MigratePresets.bat")):
@@ -49,8 +92,8 @@ print(f"Created {zip_path}: {os.path.getsize(zip_path):,} bytes")
 # 2. Package VST3-only zip
 vst3_zip_path = os.path.join(release_dir, vst3_zip_name)
 with zipfile.ZipFile(vst3_zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-    vst3_dir = os.path.join(build_dir, "VST3", "Bumbler XD.vst3")
     for root, dirs, files in os.walk(vst3_dir):
+        dirs.sort()
         for f in sorted(files):
             full = os.path.join(root, f)
             rel = os.path.relpath(full, os.path.join(build_dir, "VST3"))

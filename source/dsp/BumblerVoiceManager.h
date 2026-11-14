@@ -46,8 +46,13 @@ namespace bumbler {
  *    for voices currently in their Release envelope stage (isReleasing() == true).
  *    Among these, the voice with the lowest trigger sample timestamp is stolen.
  *
- * 4. Tier 4 (Oldest Held Voice Stealing / LRU Fallback):
- *    If all active voices are actively held (sustaining), the voice with the oldest
+ * 4. Tier 4 (Oldest Pedal-Latched Released Voice Stealing):
+ *    If no voices are in Release, the manager steals the oldest active voice held
+ *    exclusively by the sustain pedal (isPedalLatched() && !isHeld()) before touching
+ *    physically held keys.
+ *
+ * 5. Tier 5 (Oldest Held Voice Stealing / LRU Fallback):
+ *    If all active voices are physically held on the keyboard, the voice with the oldest
  *    trigger sample timestamp across the active polyphony pool is stolen.
  *
  * Invariant Constraints:

@@ -10,7 +10,8 @@
 
 namespace bumbler {
 
-class BumblerAudioProcessor : public juce::AudioProcessor {
+class BumblerAudioProcessor : public juce::AudioProcessor,
+                              public juce::ChangeBroadcaster {
 public:
     BumblerAudioProcessor();
     ~BumblerAudioProcessor() override = default;

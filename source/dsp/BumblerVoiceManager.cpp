@@ -104,7 +104,26 @@ BumblerVoice* BumblerVoiceManager::allocateVoice(int midiNote) noexcept {
     }
 
     // ------------------------------------------------------------------------
-    // Tier 4: Oldest Held Voice Stealing (LRU)
+    // Tier 4: Pedal-Latched Released Voice Stealing
+    // Prefer stealing voices whose physical keys were released and are sustained
+    // solely by CC 64 before stealing physically held keys.
+    // ------------------------------------------------------------------------
+    BumblerVoice* oldestPedalLatched = nullptr;
+    uint64_t oldestPedalSample = UINT64_MAX;
+    for (int i = 0; i < mMaxPolyphony; ++i) {
+        auto& v = mVoices[static_cast<size_t>(i)];
+        if (v.isActive() && v.isPedalLatched() && !v.isHeld() && v.getTriggerSample() < oldestPedalSample) {
+            oldestPedalSample = v.getTriggerSample();
+            oldestPedalLatched = &v;
+        }
+    }
+    if (oldestPedalLatched != nullptr) {
+        mLastAllocatedIndex = static_cast<int>(oldestPedalLatched - &mVoices[0]);
+        return oldestPedalLatched;
+    }
+
+    // ------------------------------------------------------------------------
+    // Tier 5: Oldest Held Voice Stealing (LRU)
     // All voices are physically held. Steal the oldest note in the pool.
     // ------------------------------------------------------------------------
     BumblerVoice* oldestHeld = nullptr;
@@ -150,6 +169,7 @@ void BumblerVoiceManager::noteOff(int midiNote, float velocity) noexcept {
         auto& v = mVoices[static_cast<size_t>(i)];
         if (v.isActive() && v.getMidiNote() == midiNote && v.isHeld()) {
             if (mSustainPedal) {
+                v.setHeld(false);
                 v.setPedalLatched(true);
             } else {
                 v.noteOff(velocity);

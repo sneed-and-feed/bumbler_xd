@@ -36,6 +36,8 @@ BumblerAudioProcessorEditor::BumblerAudioProcessorEditor(BumblerAudioProcessor& 
     apvts.addParameterListener("ampSustain", this);
     apvts.addParameterListener("ampRelease", this);
 
+    mProcessor.addChangeListener(this);
+
     // Initial LCD curve build
     updateLcdDisplays();
 
@@ -49,6 +51,7 @@ BumblerAudioProcessorEditor::BumblerAudioProcessorEditor(BumblerAudioProcessor& 
 }
 
 BumblerAudioProcessorEditor::~BumblerAudioProcessorEditor() {
+    mProcessor.removeChangeListener(this);
     removeMouseListener(this);
     setLookAndFeel(nullptr);
 
@@ -98,6 +101,28 @@ void BumblerAudioProcessorEditor::parameterChanged(const juce::String&, float) {
     }
 }
 
+void BumblerAudioProcessorEditor::changeListenerCallback(juce::ChangeBroadcaster* source) {
+    if (source == &mProcessor) {
+        syncPresetComboSelection();
+        updateLcdDisplays();
+    }
+}
+
+void BumblerAudioProcessorEditor::syncPresetComboSelection() {
+    const int curProg = mProcessor.getCurrentProgram();
+    mLastSyncedProgram = curProg;
+    if (curProg >= 0 && curProg < 20) {
+        if (mPresetComboBox.getSelectedId() != curProg + 1) {
+            mPresetComboBox.setSelectedId(curProg + 1, juce::dontSendNotification);
+        }
+    } else if (curProg == -1) {
+        const int selId = mPresetComboBox.getSelectedId();
+        if (selId >= 1 && selId <= 20) {
+            mPresetComboBox.setSelectedId(0, juce::dontSendNotification);
+        }
+    }
+}
+
 void BumblerAudioProcessorEditor::updateLcdDisplays() {
     auto& apvts = mProcessor.getApvts();
     auto getVal = [&apvts](const char* id) -> float {
@@ -134,17 +159,7 @@ void BumblerAudioProcessorEditor::updateLcdDisplays() {
         getVal("ampRelease")
     );
 
-    const int curProg = mProcessor.getCurrentProgram();
-    if (curProg != mLastSyncedProgram) {
-        mLastSyncedProgram = curProg;
-        if (curProg >= 0 && curProg < 20) {
-            if (mPresetComboBox.getSelectedId() != curProg + 1) {
-                mPresetComboBox.setSelectedId(curProg + 1, juce::dontSendNotification);
-            }
-        } else if (curProg == -1 && mPresetComboBox.getSelectedId() >= 1 && mPresetComboBox.getSelectedId() <= 20) {
-            mPresetComboBox.setSelectedId(0, juce::dontSendNotification);
-        }
-    }
+    syncPresetComboSelection();
 }
 
 void BumblerAudioProcessorEditor::addKnob(const juce::ParameterID& paramId, const char* name,
