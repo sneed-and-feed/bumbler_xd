@@ -21,6 +21,8 @@
 
 namespace bumbler {
 
+inline constexpr const char* kBumblerVersionString = "1.1.0";
+
 // ============================================================================
 // Mathematical Constants
 // ============================================================================
@@ -87,6 +89,12 @@ private:
     return (bits & 0x7F800000u) != 0x7F800000u;
 }
 
+[[nodiscard]] inline bool isFiniteBitwiseDouble(double val) noexcept {
+    uint64_t bits;
+    std::memcpy(&bits, &val, sizeof(double));
+    return (bits & 0x7FF0000000000000ULL) != 0x7FF0000000000000ULL;
+}
+
 [[nodiscard]] inline bool isNanOrInfBitwise(float val) noexcept {
     return !isFiniteBitwise(val);
 }
@@ -134,20 +142,27 @@ private:
 // Returns residual correction for step discontinuity over [-dt, dt]
 // ============================================================================
 [[nodiscard]] inline float polyBlep(float t, float dt) noexcept {
-    if (dt <= 0.0f) return 0.0f;
-    if (t < dt) {
-        const float x = t / dt;
+    if (!isFiniteBitwise(t) || !isFiniteBitwise(dt) || dt <= 0.0f) [[unlikely]] return 0.0f;
+    const float safeDt = std::min(dt, 0.5f);
+    if (t < safeDt) {
+        const float x = t / safeDt;
         return x + x - x * x - 1.0f; // 2x - x^2 - 1
     }
-    if (t > 1.0f - dt) {
-        const float x = (t - 1.0f) / dt;
+    if (t > 1.0f - safeDt) {
+        const float x = (t - 1.0f) / safeDt;
         return x * x + x + x + 1.0f; // x^2 + 2x + 1
     }
     return 0.0f;
 }
 
 [[nodiscard]] inline float polyBlep4(float t, float dt) noexcept {
-    if (dt <= 0.0f) return 0.0f;
+    if (!isFiniteBitwise(t) || !isFiniteBitwise(dt) || dt <= 0.0f) [[unlikely]] return 0.0f;
+    // Above fs/4 (dt > 0.25), the 4-sample [0, 2*dt) and (1 - 2*dt, 1] windows overlap,
+    // which would short-circuit the right-hand kernel branch and inject DC bias/aliasing.
+    // Delegate cleanly to the 2-point PolyBLEP kernel whose windows stay disjoint up to Nyquist.
+    if (dt > 0.25f) [[unlikely]] {
+        return polyBlep(t, dt);
+    }
     constexpr float c = 0.095f;
     constexpr float a1 = 2.0f - 8.0f * c;       // 1.24f
     constexpr float a3 = 16.0f * c - 2.0f;      // -0.48f
@@ -220,16 +235,18 @@ public:
     }
 
     void setSampleRate(float sampleRate, float cutoffHz = 10.0f) noexcept {
-        const float fs = (sampleRate > 100.0f) ? sampleRate : 48000.0f;
-        mR = 1.0f - (kTwoPi * cutoffHz / fs);
+        const float fs = (isFiniteBitwise(sampleRate) && sampleRate > 100.0f) ? sampleRate : 48000.0f;
+        const float fc = (isFiniteBitwise(cutoffHz) && cutoffHz > 0.1f) ? cutoffHz : 10.0f;
+        mR = 1.0f - (kTwoPi * fc / fs);
         mR = std::clamp(mR, 0.90f, 0.9999f);
     }
 
     [[nodiscard]] inline float process(float x) noexcept {
-        const float y = x - mX1 + mR * mY1;
-        mX1 = flushDenormal(x);
+        const float safeX = isFiniteBitwise(x) ? x : 0.0f;
+        const float y = safeX - mX1 + mR * mY1;
+        mX1 = flushDenormal(safeX);
         mY1 = flushDenormal(y);
-        return y;
+        return mY1;
     }
 
 private:

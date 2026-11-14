@@ -115,8 +115,11 @@ private:
 
     // Sub-block parameter smoothing registers
     bool mFirstBlock { true };
+    WaspFilterMode mLastMode { WaspFilterMode::LP24 };
     double mCurrentG { 0.1 };
     double mCurrentK { 2.0 };
+    double mCurrentDblG1 { 0.1 };
+    double mCurrentDblG2 { 0.1 };
 };
 
 } // namespace bumbler

@@ -28,6 +28,7 @@ BumblerAudioProcessorEditor::BumblerAudioProcessorEditor(BumblerAudioProcessor& 
     apvts.addParameterListener("filterRelease", this);
 
     apvts.addParameterListener("filterEnvAmount", this);
+    apvts.addParameterListener("filterCutoff", this);
     apvts.addParameterListener("envLink", this);
 
     apvts.addParameterListener("ampAttack", this);
@@ -59,6 +60,7 @@ BumblerAudioProcessorEditor::~BumblerAudioProcessorEditor() {
     apvts.removeParameterListener("filterRelease", this);
 
     apvts.removeParameterListener("filterEnvAmount", this);
+    apvts.removeParameterListener("filterCutoff", this);
     apvts.removeParameterListener("envLink", this);
 
     apvts.removeParameterListener("ampAttack", this);
@@ -131,6 +133,18 @@ void BumblerAudioProcessorEditor::updateLcdDisplays() {
         getVal("ampSustain"),
         getVal("ampRelease")
     );
+
+    const int curProg = mProcessor.getCurrentProgram();
+    if (curProg != mLastSyncedProgram) {
+        mLastSyncedProgram = curProg;
+        if (curProg >= 0 && curProg < 20) {
+            if (mPresetComboBox.getSelectedId() != curProg + 1) {
+                mPresetComboBox.setSelectedId(curProg + 1, juce::dontSendNotification);
+            }
+        } else if (curProg == -1 && mPresetComboBox.getSelectedId() >= 1 && mPresetComboBox.getSelectedId() <= 20) {
+            mPresetComboBox.setSelectedId(0, juce::dontSendNotification);
+        }
+    }
 }
 
 void BumblerAudioProcessorEditor::addKnob(const juce::ParameterID& paramId, const char* name,
@@ -451,6 +465,7 @@ void BumblerAudioProcessorEditor::refreshPresetMenu() {
     }
 
     const int curProg = mProcessor.getCurrentProgram();
+    mLastSyncedProgram = curProg;
     if (curProg >= 0 && curProg < 20) {
         mPresetComboBox.setSelectedId(curProg + 1, juce::dontSendNotification);
     }
@@ -735,7 +750,7 @@ void BumblerAudioProcessorEditor::paint(juce::Graphics& g) {
 
     g.setFont(juce::FontOptions(10.0f, juce::Font::plain));
     g.setColour(juce::Colour(BumblerColours::TextMuted));
-    g.drawText("VINTAGE WASP XT HOMAGE | JUCE 8", 25, 38, 220, 16, juce::Justification::centredLeft);
+    g.drawText(juce::String("WASP XT HOMAGE | v") + kBumblerVersionString, 25, 38, 152, 16, juce::Justification::centredLeft);
 
     // 3. Section Decks Outline & Titles
     auto drawDeck = [&](juce::Rectangle<int> r, const char* title) {

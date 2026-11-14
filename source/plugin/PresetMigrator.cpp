@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstring>
 #include <algorithm>
+#include <tuple>
 
 namespace bumbler {
 
@@ -88,10 +89,10 @@ static const char* const kNativeWaspXtParams[56] = {
     /* 43 */ "modAttack",            // ModAttackWheel
     /* 44 */ "modDecay",             // ModDecayWheel
     /* 45 */ "modAmount",            // ModAmountWheel
-    /* 46 */ "modDest1",             // ModDest1Btn (Filter Cutoff)
-    /* 47 */ "modDest2",             // ModDest2Btn (Osc1 Pitch)
-    /* 48 */ "modDest3",             // ModDest3Btn (Osc2 Pitch)
-    /* 49 */ "modDest4",             // ModDest4Btn (Pulse Width)
+    /* 46 */ "modDest1",             // ModDest1Btn (PW -> target 0)
+    /* 47 */ "modDest2",             // ModDest2Btn (Lfo1Amt -> target 1)
+    /* 48 */ "modDest3",             // ModDest3Btn (Osc1Level -> target 2)
+    /* 49 */ "modDest4",             // ModDest4Btn (Osc2Pitch -> target 3)
     /* 50 */ "masterVolume",         // VolumeWheel
     /* 51 */ "aftertouch",           // AftertouchBtn
     /* 52 */ "lfo1Delay",            // LFO1DelayWheel
@@ -402,17 +403,19 @@ ParameterSnapshot PresetMigrator::mapNativeWaspFloatsToSnapshot(const std::vecto
     }
 
     // Mod Destination Buttons (Tags 46..49)
-    // 46: ModDest1Btn (Filter Cutoff) -> target 0
-    // 47: ModDest2Btn (Osc1 Pitch)    -> target 1
-    // 48: ModDest3Btn (Osc2 Pitch)    -> target 1
-    // 49: ModDest4Btn (Pulse Width)   -> target 2
+    // 46: ModDest1Btn -> target 0 (PW)
+    // 47: ModDest2Btn -> target 1 (Lfo1Amt)
+    // 48: ModDest3Btn -> target 2 (Osc1Level)
+    // 49: ModDest4Btn -> target 3 (Osc2Pitch)
     if (floats.size() > 49) {
         if (floats[46] >= 0.5f) {
-            snap.modTarget = 0.0f; // Filter
-        } else if (floats[47] >= 0.5f || floats[48] >= 0.5f) {
-            snap.modTarget = 1.0f; // Pitch
+            snap.modTarget = 0.0f; // PW
+        } else if (floats[47] >= 0.5f) {
+            snap.modTarget = 1.0f; // Lfo1Amt
+        } else if (floats[48] >= 0.5f) {
+            snap.modTarget = 2.0f; // Osc1Level
         } else if (floats[49] >= 0.5f) {
-            snap.modTarget = 2.0f; // Pulse Width
+            snap.modTarget = 3.0f; // Osc2Pitch
         }
     }
 
@@ -513,11 +516,13 @@ ParameterSnapshot PresetMigrator::mapDelphiWaspIntegersToSnapshot(const std::vec
 
     // Mod Destination Buttons (Tags 46..49)
     if (p[46] > 0) {
-        s.modTarget = 0.0f; // Filter
-    } else if (p[47] > 0 || p[48] > 0) {
-        s.modTarget = 1.0f; // Pitch
+        s.modTarget = 0.0f; // PW
+    } else if (p[47] > 0) {
+        s.modTarget = 1.0f; // Lfo1Amt
+    } else if (p[48] > 0) {
+        s.modTarget = 2.0f; // Osc1Level
     } else if (p[49] > 0) {
-        s.modTarget = 2.0f; // Pulse Width
+        s.modTarget = 3.0f; // Osc2Pitch
     } else {
         s.modTarget = 0.0f;
     }
@@ -661,7 +666,10 @@ std::vector<MigratedPreset> PresetMigrator::parseFxp(const void* dataPtr, size_t
 
     if (std::strcmp(fxMagic, "FxCk") == 0) {
         // Regular Float Preset
-        int32_t numParams = readBE32i(data + 24);
+        if (sizeBytes < 56) return out;
+        const int32_t numParams = readBE32i(data + 24);
+        if (numParams <= 0 || numParams > 4096) return out;
+
         char prName[29] = {0};
         std::memcpy(prName, data + 28, 28);
         juce::String name = juce::String::fromUTF8(prName).trim();
@@ -671,11 +679,13 @@ std::vector<MigratedPreset> PresetMigrator::parseFxp(const void* dataPtr, size_t
         if (name.isEmpty()) name = "Migrated Preset";
 
         const size_t floatStart = 56;
-        if (floatStart + numParams * 4 <= sizeBytes) {
+        const size_t paramByteSpan = static_cast<size_t>(numParams) * 4u;
+        if (paramByteSpan <= sizeBytes - floatStart) {
             std::vector<float> floats;
-            floats.reserve(numParams);
-            for (int i = 0; i < numParams; ++i) {
-                floats.push_back(readBEFloat(data + floatStart + i * 4));
+            floats.reserve(static_cast<size_t>(numParams));
+            for (int32_t i = 0; i < numParams; ++i) {
+                const float f = readBEFloat(data + floatStart + static_cast<size_t>(i) * 4u);
+                floats.push_back(std::isfinite(f) ? f : 0.0f);
             }
 
             MigratedPreset p;
@@ -689,6 +699,7 @@ std::vector<MigratedPreset> PresetMigrator::parseFxp(const void* dataPtr, size_t
         }
     } else if (std::strcmp(fxMagic, "FPCh") == 0) {
         // Opaque Chunk Preset
+        if (sizeBytes < 60) return out;
         char prName[29] = {0};
         std::memcpy(prName, data + 28, 28);
         juce::String name = juce::String::fromUTF8(prName).trim();
@@ -697,40 +708,41 @@ std::vector<MigratedPreset> PresetMigrator::parseFxp(const void* dataPtr, size_t
         }
         if (name.isEmpty()) name = "Migrated Preset";
 
-        if (sizeBytes >= 60) {
-            uint32_t chunkSize = readBE32(data + 56);
-            const uint8_t* chunk = data + 60;
-            size_t availableChunk = std::min(static_cast<size_t>(chunkSize), sizeBytes - 60);
+        uint32_t chunkSize = readBE32(data + 56);
+        const uint8_t* chunk = data + 60;
+        size_t availableChunk = std::min(static_cast<size_t>(chunkSize), sizeBytes - 60);
 
-            auto floats = extractFloats(chunk, availableChunk, true);
-            if (floats.size() < 10) floats = extractFloats(chunk, availableChunk, false);
+        auto floats = extractFloats(chunk, availableChunk, true);
+        if (floats.size() < 10) floats = extractFloats(chunk, availableChunk, false);
 
-            if (floats.empty() && availableChunk >= 32) {
-                for (size_t i = 0; i < std::min(availableChunk, size_t(55)); ++i) {
-                    floats.push_back(chunk[i] / 255.0f);
-                }
+        if (floats.empty() && availableChunk >= 32) {
+            for (size_t i = 0; i < std::min(availableChunk, size_t(55)); ++i) {
+                floats.push_back(chunk[i] / 255.0f);
             }
+        }
 
-            if (!floats.empty()) {
-                MigratedPreset p;
-                p.name = name;
-                p.sourceFormat = "VST 2.4 FXP (FPCh)";
-                p.sourceFilePath = filename;
-                p.snapshot = mapFloatsToSnapshot(floats, floats.size() <= 36);
-                p.parameterMap = snapshotToMap(p.snapshot);
-                p.category = inferCategory(name, p.snapshot);
-                out.push_back(p);
-            }
+        if (!floats.empty()) {
+            MigratedPreset p;
+            p.name = name;
+            p.sourceFormat = "VST 2.4 FXP (FPCh)";
+            p.sourceFilePath = filename;
+            p.snapshot = mapFloatsToSnapshot(floats, floats.size() <= 36);
+            p.parameterMap = snapshotToMap(p.snapshot);
+            p.category = inferCategory(name, p.snapshot);
+            out.push_back(p);
         }
     } else if (std::strcmp(fxMagic, "FxBk") == 0) {
         // Regular Bank with multiple programs
+        if (sizeBytes < 160) return out;
         int32_t numPrograms = readBE32i(data + 20);
-        int32_t numParams = (sizeBytes >= 160) ? readBE32i(data + 156) : 55;
+        if (numPrograms <= 0 || numPrograms > 1024) return out;
+        int32_t numParams = readBE32i(data + 156);
         if (numParams <= 0 || numParams > 256) numParams = 55;
 
         size_t offset = 160;
-        for (int pIdx = 0; pIdx < numPrograms; ++pIdx) {
-            if (offset + 28 + numParams * 4 > sizeBytes) break;
+        const size_t progPayloadBytes = 28u + static_cast<size_t>(numParams) * 4u;
+        for (int32_t pIdx = 0; pIdx < numPrograms; ++pIdx) {
+            if (progPayloadBytes > sizeBytes - offset) break;
 
             char prName[29] = {0};
             std::memcpy(prName, data + offset, 28);
@@ -744,11 +756,12 @@ std::vector<MigratedPreset> PresetMigrator::parseFxp(const void* dataPtr, size_t
             if (name.isEmpty()) name = juce::String::formatted("Patch %02d", pIdx + 1);
 
             std::vector<float> floats;
-            floats.reserve(numParams);
-            for (int i = 0; i < numParams; ++i) {
-                floats.push_back(readBEFloat(data + offset + i * 4));
+            floats.reserve(static_cast<size_t>(numParams));
+            for (int32_t i = 0; i < numParams; ++i) {
+                const float f = readBEFloat(data + offset + static_cast<size_t>(i) * 4u);
+                floats.push_back(std::isfinite(f) ? f : 0.0f);
             }
-            offset += numParams * 4;
+            offset += static_cast<size_t>(numParams) * 4u;
 
             MigratedPreset mp;
             mp.name = name;
@@ -989,13 +1002,15 @@ std::vector<MigratedPreset> PresetMigrator::parseFst(const void* dataPtr, size_t
             uint32_t chunkLen = readLE32(data + pos + 4);
             pos += 8;
 
-            if (pos + chunkLen > sizeBytes) break;
+            if (chunkLen > sizeBytes - pos) break;
             const uint8_t* chunkPayload = data + pos;
 
             auto sub = parseNativeWaspChunk(chunkPayload, chunkLen, baseName, filename);
             if (!sub.empty()) return sub;
 
-            pos += (chunkLen + 1) & ~1; // 2-byte alignment
+            const size_t step = static_cast<size_t>(chunkLen) + (chunkLen & 1u); // 2-byte alignment
+            if (step > sizeBytes - pos) break;
+            pos += step;
         }
     }
 
@@ -1006,16 +1021,24 @@ std::vector<MigratedPreset> PresetMigrator::parseFst(const void* dataPtr, size_t
     return out;
 }
 
-static std::pair<uint32_t, size_t> readVarint(const uint8_t* buf, size_t pos, size_t maxLen) {
+static std::tuple<uint32_t, size_t, bool> readVarint(const uint8_t* buf, size_t pos, size_t maxLen) noexcept {
     uint32_t result = 0;
     int shift = 0;
     while (pos < maxLen) {
-        uint8_t b = buf[pos++];
-        result |= (uint32_t(b & 0x7F) << shift);
+        const uint8_t b = buf[pos++];
+        if (shift == 28 && (b & 0xF0u) != 0) {
+            return { 0u, pos, false };
+        }
+        result |= (static_cast<uint32_t>(b & 0x7Fu) << shift);
+        if ((b & 0x80u) == 0) {
+            return { result, pos, true };
+        }
         shift += 7;
-        if ((b & 0x80) == 0) break;
+        if (shift > 28) {
+            return { 0u, pos, false };
+        }
     }
-    return {result, pos};
+    return { 0u, pos, false };
 }
 
 std::vector<MigratedPreset> PresetMigrator::parseFlp(const void* dataPtr, size_t sizeBytes, const juce::String& filename) {
@@ -1026,7 +1049,7 @@ std::vector<MigratedPreset> PresetMigrator::parseFlp(const void* dataPtr, size_t
     size_t flhdPos = 0;
     bool foundFlhd = false;
 
-    for (size_t i = 0; i + 4 <= sizeBytes; ++i) {
+    for (size_t i = 0; i + 8 <= sizeBytes; ++i) {
         if (std::memcmp(data + i, "FLhd", 4) == 0) {
             flhdPos = i;
             foundFlhd = true;
@@ -1035,16 +1058,16 @@ std::vector<MigratedPreset> PresetMigrator::parseFlp(const void* dataPtr, size_t
     }
     if (!foundFlhd) return out;
 
-    size_t pos = flhdPos;
-    uint32_t headerLen = readLE32(data + pos + 4);
-    pos += 8 + headerLen;
+    const uint32_t headerLen = readLE32(data + flhdPos + 4);
+    if (headerLen > sizeBytes - (flhdPos + 8)) return out;
+    size_t pos = flhdPos + 8 + static_cast<size_t>(headerLen);
 
     if (pos + 8 > sizeBytes) return out;
 
     // Scan for FLdt
     size_t fldtPos = 0;
     bool foundFldt = false;
-    for (size_t i = pos; i + 4 <= sizeBytes; ++i) {
+    for (size_t i = pos; i + 8 <= sizeBytes; ++i) {
         if (std::memcmp(data + i, "FLdt", 4) == 0) {
             fldtPos = i;
             foundFldt = true;
@@ -1053,9 +1076,9 @@ std::vector<MigratedPreset> PresetMigrator::parseFlp(const void* dataPtr, size_t
     }
     if (!foundFldt) return out;
 
-    uint32_t fldtLen = readLE32(data + fldtPos + 4);
+    const uint32_t fldtLen = readLE32(data + fldtPos + 4);
     pos = fldtPos + 8;
-    const size_t endPos = std::min(sizeBytes, pos + fldtLen);
+    const size_t endPos = (fldtLen <= sizeBytes - pos) ? (pos + static_cast<size_t>(fldtLen)) : sizeBytes;
 
     juce::String currentChanName;
     juce::String currentPluginName;
@@ -1075,13 +1098,15 @@ std::vector<MigratedPreset> PresetMigrator::parseFlp(const void* dataPtr, size_t
                 currentPluginName = {};
             }
         } else if (cmd < 128) {
+            if (endPos - pos < 2) break;
             pos += 2;
         } else if (cmd < 192) {
+            if (endPos - pos < 4) break;
             pos += 4;
         } else {
-            auto [chunkLen, newPos] = readVarint(data, pos, endPos);
+            auto [chunkLen, newPos, ok] = readVarint(data, pos, endPos);
             pos = newPos;
-            if (pos + chunkLen > endPos) break;
+            if (!ok || chunkLen > endPos - pos) break;
 
             const uint8_t* chunkBytes = data + pos;
             pos += chunkLen;
@@ -1136,6 +1161,109 @@ std::vector<MigratedPreset> PresetMigrator::parseFlp(const void* dataPtr, size_t
     return out;
 }
 
+struct ApvtsParamBoundSpec {
+    const char* id;
+    float minVal;
+    float maxVal;
+    float defaultVal;
+    bool isDiscrete;
+};
+
+static constexpr ApvtsParamBoundSpec kApvtsParamBoundSpecs[55] = {
+    // Oscillators (14)
+    { "osc1Waveform",  0.0f,    3.0f,     0.0f,    true  },
+    { "osc1Octave",   -3.0f,    3.0f,     0.0f,    true  },
+    { "osc1Fine",     -1.0f,    1.0f,     0.0f,    false },
+    { "osc2Waveform",  0.0f,    3.0f,     0.0f,    true  },
+    { "osc2Octave",   -3.0f,    3.0f,     0.0f,    true  },
+    { "osc2Fine",     -1.0f,    1.0f,     0.0f,    false },
+    { "oscMix",        0.0f,    1.0f,     0.5f,    false },
+    { "osc3Waveform",  0.0f,    1.0f,     0.0f,    true  },
+    { "osc3Level",     0.0f,    1.0f,     0.0f,    false },
+    { "ringModMix",    0.0f,    1.0f,     0.0f,    false },
+    { "pulseWidth",    0.01f,   0.99f,    0.50f,   false },
+    { "fmAmount",      0.0f,    1.0f,     0.0f,    false },
+    { "velToAmp",      0.0f,    1.0f,     0.50f,   false },
+    { "velToFilter",   0.0f,    1.0f,     0.50f,   false },
+    // Filter (5)
+    { "filterMode",      0.0f,  5.0f,     1.0f,    true  },
+    { "filterCutoff",   20.0f,  20000.0f, 1200.0f, false },
+    { "filterResonance", 0.0f,  1.0f,     0.20f,   false },
+    { "filterKbTrack",   0.0f,  1.0f,     0.50f,   false },
+    { "filterEnvAmount",-1.0f,  1.0f,     0.0f,    false },
+    // Envelopes (13)
+    { "ampAttack",     0.001f,  10.0f,    0.01f,   false },
+    { "ampDecay",      0.001f,  10.0f,    0.30f,   false },
+    { "ampSustain",    0.0f,    1.0f,     0.80f,   false },
+    { "ampRelease",    0.001f,  10.0f,    0.30f,   false },
+    { "filterAttack",  0.001f,  10.0f,    0.05f,   false },
+    { "filterDecay",   0.001f,  10.0f,    0.50f,   false },
+    { "filterSustain", 0.0f,    1.0f,     0.50f,   false },
+    { "filterRelease", 0.001f,  10.0f,    0.40f,   false },
+    { "envLink",       0.0f,    1.0f,     0.0f,    true  },
+    { "modAttack",     0.001f,  5.0f,     0.05f,   false },
+    { "modDecay",      0.001f,  10.0f,    0.50f,   false },
+    { "modAmount",    -1.0f,    1.0f,     0.0f,    false },
+    { "modTarget",     0.0f,    3.0f,     0.0f,    true  },
+    // Dual LFOs (16)
+    { "lfo1Waveform",  0.0f,    3.0f,     2.0f,    true  },
+    { "lfo1Rate",      0.05f,   30.0f,    2.0f,    false },
+    { "lfo1Delay",     0.0f,    5.0f,     0.0f,    false },
+    { "lfo1Sync",      0.0f,    1.0f,     0.0f,    true  },
+    { "lfo1SyncDiv",   0.0f,    5.0f,     3.0f,    true  },
+    { "lfo1KeyReset",  0.0f,    1.0f,     1.0f,    true  },
+    { "lfo1Amount",    0.0f,    1.0f,     0.0f,    false },
+    { "lfo1Target",    0.0f,    2.0f,     1.0f,    true  },
+    { "lfo2Waveform",  0.0f,    3.0f,     2.0f,    true  },
+    { "lfo2Rate",      0.05f,   30.0f,    1.0f,    false },
+    { "lfo2Delay",     0.0f,    5.0f,     0.0f,    false },
+    { "lfo2Sync",      0.0f,    1.0f,     0.0f,    true  },
+    { "lfo2SyncDiv",   0.0f,    5.0f,     4.0f,    true  },
+    { "lfo2KeyReset",  0.0f,    1.0f,     1.0f,    true  },
+    { "lfo2Amount",    0.0f,    1.0f,     0.0f,    false },
+    { "lfo2Target",    0.0f,    2.0f,     0.0f,    true  },
+    // Character & Output (7)
+    { "driveEnabled",  0.0f,    1.0f,     0.0f,    true  },
+    { "driveAmount",   0.0f,    1.0f,     0.30f,   false },
+    { "driveTone",     0.0f,    1.0f,     0.50f,   false },
+    { "dualMode",      0.0f,    1.0f,     0.0f,    true  },
+    { "analogMode",    0.0f,    1.0f,     0.0f,    true  },
+    { "wNoiseMode",    0.0f,    1.0f,     0.0f,    true  },
+    { "masterVolume",  0.0f,    1.0f,     0.80f,   false }
+};
+
+static bool sanitizeXmlParamValue(const juce::String& pid, const juce::String& rawValStr, float& outVal) noexcept {
+    const ApvtsParamBoundSpec* found = nullptr;
+    for (const auto& spec : kApvtsParamBoundSpecs) {
+        if (pid == spec.id) {
+            found = &spec;
+            break;
+        }
+    }
+    if (found == nullptr) {
+        return false;
+    }
+
+    const juce::String trimmed = rawValStr.trim();
+    if (trimmed.isEmpty() || !trimmed.containsOnly("0123456789+-eE.")) {
+        outVal = found->defaultVal;
+        return true;
+    }
+
+    const double parsed = trimmed.getDoubleValue();
+    if (!std::isfinite(parsed)) {
+        outVal = found->defaultVal;
+        return true;
+    }
+
+    float clamped = std::clamp(static_cast<float>(parsed), found->minVal, found->maxVal);
+    if (found->isDiscrete) {
+        clamped = std::clamp(std::round(clamped), found->minVal, found->maxVal);
+    }
+    outVal = clamped;
+    return true;
+}
+
 std::vector<MigratedPreset> PresetMigrator::parseXml(const juce::String& xmlText, const juce::String& filename) {
     std::vector<MigratedPreset> out;
     auto xml = juce::XmlDocument::parse(xmlText);
@@ -1150,13 +1278,17 @@ std::vector<MigratedPreset> PresetMigrator::parseXml(const juce::String& xmlText
     p.sourceFormat = xml->getStringAttribute("sourceFormat", "Bumbler XD APVTS XML");
     p.sourceFilePath = filename;
     p.snapshot = createDefaultSnapshot();
+    p.parameterMap = snapshotToMap(p.snapshot);
 
     for (auto* child : xml->getChildIterator()) {
-        if (child->hasTagName("PARAM")) {
-            juce::String pid = child->getStringAttribute("id");
-            float val = static_cast<float>(child->getDoubleAttribute("value", 0.0));
-            applyParamToSnapshot(p.snapshot, pid, val);
-            p.parameterMap[pid] = val;
+        if (child->hasTagName("PARAM") && child->hasAttribute("id") && child->hasAttribute("value")) {
+            const juce::String pid = child->getStringAttribute("id");
+            const juce::String rawValStr = child->getStringAttribute("value");
+            float sanitized = 0.0f;
+            if (sanitizeXmlParamValue(pid, rawValStr, sanitized)) {
+                applyParamToSnapshot(p.snapshot, pid, sanitized);
+                p.parameterMap[pid] = sanitized;
+            }
         }
     }
     if (p.category == "Synth") {

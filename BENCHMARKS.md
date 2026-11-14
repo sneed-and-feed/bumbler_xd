@@ -58,7 +58,7 @@ All benchmarks reported in this document were acquired using native, non-mocked 
 
 ## Audio Thread Budget & Real-Time Constraints
 
-In real-time audio systems, the host audio driver requires each block of $B$ audio samples to be rendered and returned within a strict physical time deadline $\tau_{\text{budget}}$ determined by the sample rate $f_s$:
+In real-time audio systems, the host audio driver requires each block of $B$ audio samples to be rendered and returned within a strict physical time deadline $\tau_{\text{budget}}$ determined by the host sampling rate:
 
 ```math
 \tau_{\text{budget}} = \frac{B}{f_s}
@@ -193,7 +193,7 @@ c (x + 2)^4, & 1 - 2\Delta t < t \le 1 - \Delta t \\
 \end{cases}
 ```
 
-where $x = t / \Delta t$, $c = 0.095$, $a_1 = 2 - 8c$, $a_3 = 16c - 2$, and $a_4 = 1 - 9c$.
+where $x = t / \Delta t, \; c = 0.095, \; a_1 = 2 - 8c, \; a_3 = 16c - 2, \text{ and } a_4 = 1 - 9c$.
 
 Empirical alias rejection was measured via a 65,536-point FFT with a 4-term Blackman-Harris window at $f_s = 48.0\text{ kHz}$. Peak alias levels were extracted by notching out true integer harmonics ($\pm 35\text{ Hz}$) and locating the maximum foldback spur in the audible spectrum ($20\text{ Hz}$ to $20\text{ kHz}$):
 
@@ -227,7 +227,7 @@ Pure sine waveforms in Bumbler XD are synthesized via `FastSinTable::sin01`, whi
 \text{THD} = \frac{\sqrt{\sum_{k=2}^\infty V_k^2}}{V_1} \times 100\%
 ```
 
-| Measurement Frequency | Fundamental Level | 2nd Harmonic ($2f_0$) | 3rd Harmonic ($3f_0$) | Residual Noise Floor | Measured THD | Measured THD+N | Requirement |
+| Measurement Frequency | Fundamental Level | 2nd Harmonic (2f0) | 3rd Harmonic (3f0) | Residual Noise Floor | Measured THD | Measured THD+N | Requirement |
 | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
 | **100 Hz** | 0.00 dBFS | -114.2 dBFS | -118.5 dBFS | < -124.0 dBFS | 0.00021% | **-99.4 dB** | < -96 dB (PASS) |
 | **440 Hz** | 0.00 dBFS | -112.4 dBFS | -116.8 dBFS | < -122.5 dBFS | 0.00028% | **-98.7 dB** | < -96 dB (PASS) |
@@ -241,13 +241,13 @@ Pure sine waveforms in Bumbler XD are synthesized via `FastSinTable::sin01`, whi
 
 #### 1. Linear Frequency Modulation (FM)
 
-Linear audio-rate frequency modulation modulates the instantaneous phase of Carrier OSC 2 by Modulator OSC 1. According to the Jacobi-Anger expansion, the resulting spectrum forms Bessel sidebands spaced at $f_c \pm k f_m$ with amplitudes governed by $J_k(\beta)$:
+Linear audio-rate frequency modulation modulates the instantaneous phase of Carrier OSC 2 by Modulator OSC 1. According to the Jacobi-Anger expansion, the resulting spectrum forms Bessel sidebands spaced at $f_c \pm k f_m$ with amplitudes governed by Bessel functions of order $k$:
 
 ```math
 y_{\text{FM}}(t) = A \sum_{k=-\infty}^{\infty} J_k(\beta) \cos(2\pi (f_c + k f_m) t)
 ```
 
-Empirical Fourier analysis ($f_c = 1000\text{ Hz}$, $f_m = 200\text{ Hz}$, modulation index $\beta = 1.0$) confirms exact theoretical matching:
+Empirical Fourier analysis at $(f_c = 1000\text{ Hz}, \; f_m = 200\text{ Hz}, \; \beta = 1.0)$ confirms exact theoretical matching:
 
 | Harmonic Component | Frequency | Theoretical Amplitude ($J_k$) | Measured Amplitude | Discrepancy |
 | :--- | :---: | :---: | :---: | :---: |
@@ -267,11 +267,11 @@ The Ring Modulator computes four-quadrant analog balanced multiplication between
 y_{\text{RM}}(t) = x_1(t) \cdot x_2(t)
 ```
 
-For inputs $x_1(t) = \cos(2\pi f_1 t)$ and $x_2(t) = \cos(2\pi f_2 t)$ with $f_1 = 440\text{ Hz}$ and $f_2 = 100\text{ Hz}$:
+For sinusoidal inputs $(x_1(t) = \cos(2\pi f_1 t), \; x_2(t) = \cos(2\pi f_2 t), \; f_1 = 440\text{ Hz}, \; f_2 = 100\text{ Hz})$:
 
 - **Difference Sideband** ($\lvert f_1 - f_2 \rvert = 340\text{ Hz}$): -6.02 dBFS (measured -6.04 dBFS)
 - **Sum Sideband** ($f_1 + f_2 = 540\text{ Hz}$): -6.02 dBFS (measured -6.04 dBFS)
-- **Sideband Energy Concentration**: **99.85%** of total acoustic power resides in $f_{\text{sum}}$ and $f_{\text{diff}}$
+- **Sideband Energy Concentration**: **99.85%** of total acoustic power resides in $(f_{\text{sum}}, \; f_{\text{diff}})$
 - **Carrier Bleed Rejection**:
   - Residual $100\text{ Hz}$ carrier: **-45.2 dBFS** (>40 dB suppression)
   - Residual $440\text{ Hz}$ carrier: **-46.8 dBFS** (>40 dB suppression)

@@ -16,6 +16,7 @@ public:
 
     void setEnvelopeParameters(float attackSec, float decaySec, float sustainLevel, float releaseSec);
     void setFilterModulationStatus(float envAmount, bool isLinked);
+    [[nodiscard]] const juce::Path& getCurvePath() const noexcept { return mCurvePath; }
 
     void paint(juce::Graphics& g) override;
     void resized() override;

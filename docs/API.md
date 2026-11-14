@@ -711,8 +711,8 @@ int main() {
 - **Dynamic Downward Scaling:** Hosts can dynamically throttle polyphony between 1 and 16 voices via `BumblerVoiceManager::setPolyphonyLimit(int limit)` to conserve CPU on resource-constrained platforms (e.g. mobile or embedded devices). However, increasing polyphony beyond 16 requires modifying `kMaxVoices` and recompiling the core library.
 
 ### 7.2 Channel-Global Pitch Bend & Continuous Controllers (No Per-Note MPE)
-- **Standard MIDI 1.0 Architecture:** Pitch bend, sustain pedal (CC 64), and continuous modulation controllers operate on a global, channel-wide basis across all active voices.
-- **No MPE Support:** MIDI Polyphonic Expression (MPE / MIDI 2.0 per-note pitch bend, polyphonic aftertouch, and per-note timbre dimensions) is not supported in the current engine topology. When a pitch bend or CC event is received via `BumblerEngine::processMidiEvent()`, the resulting modulation is dispatched uniformly to all active sounding voices.
+- **Standard MIDI 1.0 Architecture:** Pitch bend ($\pm 2$ semitones), sustain pedal (CC 64), and continuous modulation controllers (including CC 120 All Sound Off, CC 121 Reset All Controllers, and CC 123 All Notes Off) operate on a global, channel-wide basis across all voices.
+- **No MPE Support:** MIDI Polyphonic Expression (MPE / MIDI 2.0 per-note pitch bend, polyphonic aftertouch, and per-note timbre dimensions) is not supported in the current engine topology. When a pitch bend or CC event is received via `BumblerEngine::processMidiEvent()`, the resulting modulation is dispatched uniformly across the voice pool.
 
 ### 7.3 Filter Cutoff Frequency Clamping Bounds
 - **Numerical Stability of Trapezoidal Integrators:** The 6-mode Wasp filter is modeled using Zero-Delay Feedback (ZDF) state-variable filter (SVF) topologies with bilinear trapezoidal integration. The continuous-to-discrete frequency mapping requires the pre-warping evaluation:
@@ -721,14 +721,14 @@ int main() {
 g = \tan\left(\frac{\pi f_c}{f_s}\right)
 ```
 
-- **Nyquist Divergence Guard:** As $f_c \to f_s / 2$ (the Nyquist limit), $\tan(\pi f_c / f_s) \to \infty$. This would cause catastrophic floating-point overflow and numerical divergence in the loop denominator $d = 1.0 + g(g + k)$.
-- **Strict Clamping Enclosure:** To guarantee unconditional numerical stability across all sample rates ($44.1\text{ kHz}$ to $384\text{ kHz}$), modulated filter cutoff frequencies are defensively clamped to:
+- **Nyquist Divergence Guard:** As the cutoff approaches the Nyquist limit, $\tan(\pi f_c / f_s) \to \infty$. This would cause catastrophic floating-point overflow and numerical divergence in the loop denominator $d = 1.0 + g(g + k)$.
+- **Strict Clamping Enclosure:** While the APVTS base `filterCutoff` parameter spans $[20.0\text{ Hz}, 20000.0\text{ Hz}]$, modulated filter cutoff frequencies inside `WaspFilter` are dynamically clamped across all sample rates ($44.1\text{ kHz}$ to $384\text{ kHz}$) to:
 
 ```math
-f_c \in \left[20.0\text{ Hz}, \; \min\left(20000.0\text{ Hz}, \; 0.49 \cdot f_s\right)\right]
+f_c \in \left[20.0\text{ Hz}, \; 0.48 \cdot f_s\right]
 ```
 
-At $44.1\text{ kHz}$, the upper cutoff ceiling is capped at $20000.0\text{ Hz}$ ($0.4535 \cdot f_s$). At sub-audio modulation extremes, cutoffs below $20.0\text{ Hz}$ are arrested to prevent integrator state stagnation.
+At $44.1\text{ kHz}$, the dynamic Nyquist-safe ceiling is $21168.0\text{ Hz}$ ($0.48 \cdot f_s$), while at higher sample rates ($96\text{ kHz}$, $192\text{ kHz}$) envelope and keyboard-tracked sweeps remain safely bounded below Nyquist. At sub-audio modulation extremes, cutoffs below $20.0\text{ Hz}$ are arrested to prevent integrator state stagnation.
 
 ### 7.4 Block-Rate APVTS Automation Snapshots
 - **Block-Boundary Parameter Updates:** Parameter exchange between the host DAW / UI thread and the real-time audio thread operates via atomic snapshot exchange (`ParameterSnapshot`) sampled once at the entry of each audio block (`renderBlock()`).

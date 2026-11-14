@@ -40,7 +40,8 @@ void BumblerOscillator::reset(float initialPhase) noexcept {
 }
 
 void BumblerOscillator::setFrequency(float freqHz) noexcept {
-    mFrequency = std::clamp(freqHz, 5.0f, mSampleRate * 0.49f);
+    const float safeHz = isFiniteBitwise(freqHz) ? freqHz : 440.0f;
+    mFrequency = std::clamp(safeHz, 5.0f, mSampleRate * 0.49f);
     mPhaseInc = mFrequency / mSampleRate;
 }
 
@@ -55,7 +56,8 @@ float BumblerOscillator::processSample(float phaseModRad) noexcept {
 
 float BumblerOscillator::process(OscWaveform waveform, float pulseWidth, WNoiseMode noiseMode, float phaseModRad) noexcept {
     const float dt = mPhaseInc;
-    const float t = wrap01(mPhase + phaseModRad * kInvTwoPi);
+    const float safePhaseMod = isFiniteBitwise(phaseModRad) ? phaseModRad : 0.0f;
+    const float t = wrap01(mPhase + safePhaseMod * kInvTwoPi);
     float out = 0.0f;
 
     switch (waveform) {
@@ -65,7 +67,8 @@ float BumblerOscillator::process(OscWaveform waveform, float pulseWidth, WNoiseM
         }
 
         case OscWaveform::Square: {
-            const float pw = std::clamp(pulseWidth, 0.01f, 0.99f);
+            const float safePw = isFiniteBitwise(pulseWidth) ? pulseWidth : 0.5f;
+            const float pw = std::clamp(safePw, 0.01f, 0.99f);
             out = (t < pw) ? 1.0f : -1.0f;
             out += polyBlep4(t, dt);
             out -= polyBlep4(wrap01(t - pw), dt);
@@ -147,35 +150,49 @@ float BumblerTripleOscillatorSection::process(float baseFreqHz,
                                              float extModPitch2,
                                              float extModOscMix,
                                              float extModOsc1Gain) noexcept {
+    const float safeBaseFreqHz = isFiniteBitwise(baseFreqHz) ? baseFreqHz : 440.0f;
+    const float safePwMod = isFiniteBitwise(extModPw) ? extModPw : 0.0f;
+    const float safePitch1Mod = isFiniteBitwise(extModPitch1) ? extModPitch1 : 0.0f;
+    const float safePitch2Mod = isFiniteBitwise(extModPitch2) ? extModPitch2 : 0.0f;
+    const float safeMixMod = isFiniteBitwise(extModOscMix) ? extModOscMix : 0.0f;
+    const float safeOsc1Gain = isFiniteBitwise(extModOsc1Gain) ? extModOsc1Gain : 1.0f;
+
     // 1. Effective Pulse Width clamped to safe duty cycle [0.01, 0.99]
-    const float effPw = std::clamp(params.pulseWidth + extModPw, 0.01f, 0.99f);
+    const float effPw = std::clamp((isFiniteBitwise(params.pulseWidth) ? params.pulseWidth : 0.5f) + safePwMod, 0.01f, 0.99f);
     const auto noiseMode = (params.wNoiseMode >= 0.5f) ? WNoiseMode::White : WNoiseMode::Vintage;
 
     // 2. Compute pitch and process OSC 1
-    const float semi1 = params.osc1Octave * 12.0f + params.osc1Fine + extModPitch1;
-    const float f1 = std::clamp(baseFreqHz * semitonesToRatio(semi1), 5.0f, mSampleRate * 0.48f);
+    const float semi1 = (isFiniteBitwise(params.osc1Octave) ? params.osc1Octave : 0.0f) * 12.0f
+                      + (isFiniteBitwise(params.osc1Fine) ? params.osc1Fine : 0.0f)
+                      + safePitch1Mod;
+    const float f1Raw = safeBaseFreqHz * semitonesToRatio(std::clamp(semi1, -120.0f, 120.0f));
+    const float f1 = std::clamp(isFiniteBitwise(f1Raw) ? f1Raw : 440.0f, 5.0f, mSampleRate * 0.48f);
     mOsc1.setFrequency(f1);
 
-    const auto wave1 = static_cast<OscWaveform>(std::clamp(static_cast<int>(params.osc1Waveform), 0, 3));
+    const auto wave1 = static_cast<OscWaveform>(std::clamp(static_cast<int>(isFiniteBitwise(params.osc1Waveform) ? params.osc1Waveform : 0.0f), 0, 3));
     const float rawOsc1Out = mOsc1.process(wave1, effPw, noiseMode, 0.0f);
-    const float osc1Out = rawOsc1Out * std::clamp(extModOsc1Gain, 0.0f, 2.0f);
+    const float osc1Out = rawOsc1Out * std::clamp(safeOsc1Gain, 0.0f, 2.0f);
     mLastOsc1 = osc1Out;
 
     // 3. Compute pitch and process OSC 2 with Audio-Rate FM
-    const float semi2 = params.osc2Octave * 12.0f + params.osc2Fine + extModPitch2;
-    const float f2Base = std::clamp(baseFreqHz * semitonesToRatio(semi2), 5.0f, mSampleRate * 0.48f);
+    const float semi2 = (isFiniteBitwise(params.osc2Octave) ? params.osc2Octave : 0.0f) * 12.0f
+                      + (isFiniteBitwise(params.osc2Fine) ? params.osc2Fine : 0.0f)
+                      + safePitch2Mod;
+    const float f2Raw = safeBaseFreqHz * semitonesToRatio(std::clamp(semi2, -120.0f, 120.0f));
+    const float f2Base = std::clamp(isFiniteBitwise(f2Raw) ? f2Raw : 440.0f, 5.0f, mSampleRate * 0.48f);
     mOsc2.setFrequency(f2Base);
 
-    const float phaseMod2 = (params.fmAmount > 0.0001f)
-                                ? (osc1Out * params.fmAmount * 4.0f * kPi)
+    const float safeFmAmt = isFiniteBitwise(params.fmAmount) ? std::clamp(params.fmAmount, 0.0f, 1.0f) : 0.0f;
+    const float phaseMod2 = (safeFmAmt > 0.0001f)
+                                ? (osc1Out * safeFmAmt * 4.0f * kPi)
                                 : 0.0f;
 
-    const auto wave2 = static_cast<OscWaveform>(std::clamp(static_cast<int>(params.osc2Waveform), 0, 3));
+    const auto wave2 = static_cast<OscWaveform>(std::clamp(static_cast<int>(isFiniteBitwise(params.osc2Waveform) ? params.osc2Waveform : 0.0f), 0, 3));
     const float osc2Out = mOsc2.process(wave2, effPw, noiseMode, phaseMod2);
     mLastOsc2 = osc2Out;
 
     // 4. Continuous Balance Crossfade between OSC 1 and OSC 2 (Equal-Power)
-    const float mix = std::clamp(params.oscMix + extModOscMix, 0.0f, 1.0f);
+    const float mix = std::clamp((isFiniteBitwise(params.oscMix) ? params.oscMix : 0.5f) + safeMixMod, 0.0f, 1.0f);
     const float angle = mix * kHalfPi;
     const float g1 = std::cos(angle);
     const float g2 = std::sin(angle);
@@ -187,15 +204,16 @@ float BumblerTripleOscillatorSection::process(float baseFreqHz,
     mLastRingMod = cleanRingMod;
 
     // Blend Ring Mod according to ringModMix
-    const float ringMix = std::clamp(params.ringModMix, 0.0f, 1.0f);
+    const float ringMix = std::clamp(isFiniteBitwise(params.ringModMix) ? params.ringModMix : 0.0f, 0.0f, 1.0f);
     const float osc12Out = (1.0f - ringMix) * oscMixOut + ringMix * cleanRingMod;
 
     // 6. Auxiliary OSC 3 (Square or Sawtooth, tracked to base pitch)
     float osc3Out = 0.0f;
-    if (params.osc3Level > 0.001f) {
-        mOsc3.setFrequency(baseFreqHz);
+    const float safeOsc3Level = isFiniteBitwise(params.osc3Level) ? std::clamp(params.osc3Level, 0.0f, 1.0f) : 0.0f;
+    if (safeOsc3Level > 0.001f) {
+        mOsc3.setFrequency(std::clamp(safeBaseFreqHz, 5.0f, mSampleRate * 0.48f));
         const auto wave3 = (params.osc3Waveform >= 0.5f) ? OscWaveform::Saw : OscWaveform::Square;
-        osc3Out = mOsc3.process(wave3, 0.5f, noiseMode, 0.0f) * params.osc3Level;
+        osc3Out = mOsc3.process(wave3, 0.5f, noiseMode, 0.0f) * safeOsc3Level;
     }
     mLastOsc3 = osc3Out;
 

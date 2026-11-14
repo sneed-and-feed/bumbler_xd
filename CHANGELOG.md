@@ -16,7 +16,7 @@ Bumbler XD maintains strict API and DAW state recall stability commitments acros
 - **PATCH (1.0.X):** Backwards-compatible bug fixes, numerical safety patches, denormal/NaN defensive guards, code comments, and documentation updates.
 
 ### 2. JUCE AudioProcessorValueTreeState (APVTS) Parameter IDs
-- **Immutability Guarantee:** All 55 APVTS Parameter ID strings (e.g., `"osc1_waveform"`, `"filter_cutoff"`, `"amp_attack"`, `"master_volume"`) are permanently immutable throughout the entire v1.x lifecycle.
+- **Immutability Guarantee:** All 55 APVTS Parameter ID strings (e.g., `"osc1Waveform"`, `"filterCutoff"`, `"ampAttack"`, `"masterVolume"`) are permanently immutable throughout the entire v1.x lifecycle.
 - **DAW State Recall Guarantee:** Any project, track automation lane, or preset created in a major Digital Audio Workstation (Ableton Live, FL Studio, Reaper, Cubase, Logic Pro, Bitwig Studio, Studio One) with any v1.x release of Bumbler XD will restore identically in all subsequent v1.x releases without parameter displacement or state loss.
 - **Parameter Normalization Invariant:** Parameter value ranges, skew factors, and default initializations remain backwards-compatible across all minor and patch updates.
 
@@ -34,10 +34,45 @@ Bumbler XD maintains strict API and DAW state recall stability commitments acros
 | **v1.0.5** | v1.0.5 (Legacy Preset Importer, 15 Homage Presets, Docs Refactor) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
 | **v1.0.6** | v1.0.6 (QOL Drag-and-Drop Preset Migrator & GUI) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
 | **v1.0.7** | v1.0.7 (Real-Time Hot-Path Optimizations, State Recall Hardening & Async UI Coalescing) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
+| **v1.1.0** | v1.1.0 (Near-Nyquist PolyBLEP4 Symmetry, `DBL_NT` Sub-Block Smoothing, MIDI Panic Compliance, Direct `NaN`/`Inf` Immunity & Migrator Bounds Hardening) | 55 Immutable IDs (Bit-Identical) | v8.0.6 | ISO C++20 | 100% Backwards-Compatible | Windows (x64), macOS (arm64/x64), Linux (x64) |
 
 ---
 
 ## Release History
+
+## [1.1.0] - 2026-11-14
+
+### Added
+- **v1.1.0 Deep-Audit C++20 Regression Suite (`tests/v110_regression_tests.cpp`, `tests/CMakeLists.txt`):**
+  - Added CTest suite #24 (`V110RegressionTests` / `bumbler_v110_regression_tests`) covering `WaspFilter` `DBL_NT` sub-block interpolation across `44.1`–`192 kHz`, near-Nyquist `polyBlep4` (`dt > 0.25`) zero-DC symmetry, MIDI `CC 64` / `CC 120` / `CC 121` / `CC 123` voice state transitions, polyphony resize pitch-bend inheritance, live LFO delay reduction, direct `NaN`/`±Inf` injection recovery across every DSP module, adversarial C++ `PresetMigrator` binary/XML inputs, Homage Preset (`5..19`) DAW state recall, and `LCDGraphDisplay` / `PluginEditor` UI bounds & preset sync.
+- **Adversarial Python Importer Regression Tests (`tests/test_preset_importer.py`):**
+  - Expanded Python test suite to 22 `pytest` unit tests covering truncated/negative/overflowing `FxCk`/`FPCh`/`FxBk` headers, malformed >5-byte FLP varints, EOF-adjacent `FLhd`/`FLdt` markers, hostile XML `<PARAM>` attributes, and bijective `ModDest1..4` (`46..49 -> 0..3`) mapping.
+- **Canonical Version Constant (`source/dsp/BumblerCommon.h`):**
+  - Added `bumbler::kBumblerVersionString = "1.1.0"` synchronized with `CMakeLists.txt`, `PluginEditor` header badge, and `scripts/package_release.py`.
+
+### Fixed
+- **Near-Nyquist `polyBlep4` Self-Overlap Above $f_s / 4$ (`source/dsp/BumblerCommon.h`):**
+  - Fixed a high-pitch anti-aliasing bug where `polyBlep4(t, dt)` checked `t < 2 * dt` and returned before reaching `t > 1 - 2 * dt`. Whenever $f_0 > f_s / 4$ ($dt > 0.25$), the two-sample windows overlapped and silenced the right-hand discontinuity correction, introducing DC offset and foldback aliasing on high notes. `polyBlep4` now delegates cleanly to non-overlapping 2nd-order `polyBlep(t, dt)` (clamped at $dt \le 0.5$) when $dt > 0.25$ while remaining 100% bit-identical for $dt \le 0.25$.
+- **`WaspFilterMode::DBL_NT` Zipper-Free Sub-Block Smoothing (`source/dsp/WaspFilter.h`, `source/dsp/WaspFilter.cpp`):**
+  - Replaced block-constant twin-notch pre-warped integrators (`dblNtG1`, `dblNtG2`) in `WaspFilter::processBlock()` with 16-sample sub-block linear interpolation (`mCurrentDblG1`, `mCurrentDblG2`) and mode-transition state snapping (`mLastMode`), eliminating block-boundary zipper steps during modulated `DBL_NT` sweeps without reintroducing per-sample `std::tan()` calls.
+- **MIDI `CC 120` (All Sound Off), `CC 123` (All Notes Off) & `CC 121` (Reset All Controllers) Compliance (`source/plugin/PluginProcessor.cpp`, `source/dsp/BumblerEngine.cpp`, `source/dsp/BumblerVoiceManager.cpp`):**
+  - Fixed dead-code shadowing in `PluginProcessor::processBlock()` where `if (msg.isAllNotesOff() || msg.isAllSoundOff())` translated `CC 120` into `CC 123`, preventing immediate voice fast-kill (`allNotesOff(true)`).
+  - Updated `BumblerVoiceManager::allNotesOff()` to clear `mSustainPedal = false`, iterate across all 16 preallocated voices, and reset post-voice master `CharacterCircuits` (`mDcBlockerL`/`R`, `DistortionUnit` tone filter, and 5ms Haas `DualModeVoiceDoubler` delay line) on `fastKill == true` so `CC 120` yields immediate zero-residual silence, plus added `CC 121` (`Reset All Controllers`) handling to reset sustain pedal and pitch bend.
+- **Preset-Load Trigger Synchronization, Polyphony Resize Sync & Live LFO Delay Unblocking (`source/plugin/PluginProcessor.cpp`, `source/dsp/BumblerEngine.h`, `source/dsp/BumblerVoiceManager.cpp`, `source/dsp/BumblerVoice.cpp`, `source/dsp/BumblerLFO.cpp`, `tests/fixtures/preset_2_swarm_pad.csv`):**
+  - Added wait-free `syncTriggerParameters()` called ahead of MIDI dispatch in `PluginProcessor::processBlock()` so `NoteOn` events arriving on sample 0 after a preset switch immediately apply the new preset's `analogMode`, `lfo1Delay`/`lfo2Delay`, and `lfo1KeyReset`/`lfo2KeyReset` instead of inheriting stale values from the previous preset.
+  - Updated `setSustainPedal()` and `setPitchBend()` to propagate across all `mVoices` rather than `0 .. mMaxPolyphony - 1`, ensuring upper voices inherit active controller state when polyphony limit is later increased.
+  - Updated `BumblerLFO::setDelay()` to clamp `mDelaySamplesRemaining` to `mDelaySamplesTotal` when delay time decreases, immediately unblocking LFO modulation and eliminating cross-preset `lfo1Delay` bleed (`Sync Lead` -> `Swarm Pad`) previously captured in `tests/fixtures/preset_2_swarm_pad.csv`.
+- **Direct Module-Level `NaN` / `±Inf` Immunity (`source/dsp/*`, `source/plugin/PluginProcessor.cpp`):**
+  - Added IEEE-754 bitwise finite guards (`isFiniteBitwise` / `isFiniteBitwiseDouble`, immune to `-ffast-math`) across `OnePoleDCBlocker`, `BumblerOscillator`, `BumblerTripleOscillatorSection` (including Nyquist clamping on `mOsc3`), `WaspFilter`, `BumblerADSR`, `BumblerModEnvelope`, `BumblerLFO`, `BumblerVoice`, `CharacterCircuits`, and `PluginProcessor::applyParameterSnapshot()`, ensuring poison inputs can never corrupt recursive state registers and recover cleanly without `reset()`.
+- **C++ & Python `PresetMigrator` Binary Overflow, XML Sanitization & `ModDest1..4` Bijection (`source/plugin/PresetMigrator.cpp`, `scripts/import_wasp_presets.py`):**
+  - Eliminated buffer overreads and signed/unsigned 32-bit integer wraparounds on truncated or hostile `.fxp`/`.fxb` (`FxCk`, `FPCh`, `FxBk`), `.fst` RIFF chunks, and `.flp` streams (including $>5$-byte malformed varint `shift >= 32` UB and EOF-adjacent `FLhd`/`FLdt` markers).
+  - Hardened `parseXml` / `parse_xml_preset` against unknown parameter IDs, non-numeric strings, `NaN`/`Inf`, and out-of-range values using exact 55-parameter APVTS range clamping and discrete rounding.
+  - Fixed native Wasp XT `ModDest1..4` (`Tags 46..49`) translation in both v13 float and v12 Delphi integer decoders to map bijectively onto `0: PW`, `1: Lfo1Amt`, `2: Osc1Level`, `3: Osc2Pitch`.
+- **Homage Preset DAW State Recall, Header Layout, Editor Sync & LCD Bezel Clipping (`source/plugin/PluginProcessor.cpp`, `source/plugin/PluginEditor.cpp`, `source/ui/LCDGraphDisplay.cpp`):**
+  - Expanded `programIndex` persistence in `setStateInformation()` from `0..4` to `0..19` so built-in Homage Presets (`5..19`) restore accurately on DAW project reload.
+  - Updated header subtitle badge to `"WASP XT HOMAGE | v1.1.0"` without overlapping `PRESET:`, synchronized `mPresetComboBox` inside coalesced `updateLcdDisplays()` on external preset changes, and normalized `LCDGraphDisplay::buildEnvelopePath()` stage widths so long ADSR curves stay strictly inside the LCD bezel.
+- **Documentation Sync & 100% GFM / KaTeX Math Compliance (`docs/`, `tests/`, `scripts/`, `README.md`, `BENCHMARKS.md`, `TEST_READY.md`, `CHANGELOG.md`):**
+  - Upgraded `scripts/audit_gfm_math.py` (fixing ` ```math ` fence state tracking and Windows wildcard globbing) and resolved all 57 CommonMark/KaTeX delimiter and display-math formatting issues across the repository.
 
 ## [1.0.7] - 2026-10-13
 
@@ -139,7 +174,7 @@ Bumbler XD maintains strict API and DAW state recall stability commitments acros
   - Featured in `docs/API.md` and `README.md` as the primary quickstart tutorial.
 - **Formal Voice Stealing & De-Clicking Specification (`docs/DSP_ALGORITHMS.md`):**
   - Section 6.1: Complete Mermaid decision tree and 4-tier voice allocation policy.
-  - Section 6.2: Mathematical derivation of the 5ms Hann crossfade window ($w[n] = \frac{1}{2}(1 - \cos(\pi n / L))$).
+  - Section 6.2: Mathematical derivation of the 5ms Hann crossfade window $(w[n] = \frac{1}{2}(1 - \cos(\pi n / L)))$.
   - Section 6.3: Formal proof of $C^1$ continuity at transition boundaries eliminating DC-offset impulse clicks during polyphonic stealing.
 - **Known Limitations & Architectural Boundaries:**
   - Added dedicated architectural boundaries section in `docs/API.md` and `README.md` documenting fixed 16-voice ceiling, channel-global pitch bend/CC, filter cutoff clamping, block-rate automation, and single stereo bus topology.
@@ -153,9 +188,9 @@ Bumbler XD maintains strict API and DAW state recall stability commitments acros
   - Comprehensive mathematical foundations and circuit derivations for all synthesis subsystems.
   - Complete signal flow Mermaid architecture diagrams documenting audio and modulation routing.
   - 4th-order PolyBLEP piecewise polynomial derivations with boundary continuity ($C^0, C^1, C^2$) and alias rejection spectral floor measurements ($>41\text{ dB}$ at C7).
-  - Zero-Delay Feedback (ZDF) State-Variable Filter (SVF) bilinear integration, cutoff pre-warping ($g = \tan(\pi f_c / f_s)$), and algebraic loop resolution (Topology-Preserving Transform).
+  - Zero-Delay Feedback (ZDF) State-Variable Filter (SVF) bilinear integration, cutoff pre-warping $(g = \tan(\pi f_c / f_s))$, and algebraic loop resolution (Topology-Preserving Transform).
   - Modeled non-linear CMOS CD4069UB inverter saturation in the filter resonance loop.
-  - Linear audio-rate FM analysis via Jacobi-Anger Bessel function expansion ($J_n(\beta)$).
+  - Linear audio-rate FM analysis via Jacobi-Anger Bessel function expansion $(J_n(\beta))$.
   - Four-quadrant ring modulator analysis with 1-pole highpass DC blocking ($R \approx 0.99869$).
   - Master character circuits: Asymmetric tanh overdrive ($u = x + 0.15 x^2$), 1-pole dynamic tone tilt filter ($17.7\text{ dB}$ tilt), Haas 5ms psychoacoustic stereo decorrelation ($r \approx -0.820 < 0.70$), Gaussian random-walk pitch drift ($\pm 2.5\text{ cents}$), and 1024-sample Galois LFSR periodic noise.
   - Section 6.1 voice allocation decision tree and stealing policy with detailed Mermaid decision flowchart.
@@ -228,7 +263,7 @@ Bumbler XD maintains strict API and DAW state recall stability commitments acros
 - **Sound Generation & 3-Oscillator Section:**
   - Primary oscillators OSC 1 and OSC 2 with Sawtooth, Pulse (variable duty cycle $1\%\text{ to }99\%$), Sine, and Noise waveforms.
   - Continuous coarse pitch tuning ($\pm 3$ octaves) and fine tuning ($\pm 100$ cents).
-  - Dedicated auxiliary sub-oscillator (OSC 3) operating one octave below OSC 1 with selectable Square or Sawtooth waveform.
+  - Dedicated auxiliary oscillator (OSC 3) tracking the voice fundamental with selectable Square or Sawtooth waveform.
   - Smooth horizontal balance mix fader between OSC 1 and OSC 2.
   - 4th-order PolyBLEP anti-aliasing kernel delivering $>41\text{ dB}$ alias rejection across all octaves up to C7 ($2093\text{ Hz}$).
 - **Inter-Oscillator Modulation:**

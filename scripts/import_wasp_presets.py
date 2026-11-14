@@ -180,10 +180,10 @@ NATIVE_WASP_XT_PARAM_ORDER: Tuple[str, ...] = (
     "modAttack",      # 43: ModAttackWheel
     "modDecay",       # 44: ModDecayWheel
     "modAmount",      # 45: ModAmountWheel
-    "modDest1",       # 46: ModDest1Btn (Filter Cutoff) -> target 0
-    "modDest2",       # 47: ModDest2Btn (Osc1 Pitch) -> target 1
-    "modDest3",       # 48: ModDest3Btn (Osc2 Pitch) -> target 1
-    "modDest4",       # 49: ModDest4Btn (Pulse Width) -> target 2
+    "modDest1",       # 46: ModDest1Btn -> target 0 (PW)
+    "modDest2",       # 47: ModDest2Btn -> target 1 (Lfo1Amt)
+    "modDest3",       # 48: ModDest3Btn -> target 2 (Osc1Level)
+    "modDest4",       # 49: ModDest4Btn -> target 3 (Osc2Pitch)
     "masterVolume",   # 50: VolumeWheel
     "aftertouch",     # 51: AftertouchBtn
     "lfo1Delay",      # 52: LFO1DelayWheel
@@ -463,17 +463,19 @@ def map_native_wasp_floats_to_preset(
         params[pid] = map_legacy_param_to_apvts(pid, raw_val)
 
     # Mod Destination Buttons (Tags 46..49)
-    # 46: ModDest1Btn (Filter Cutoff) -> target 0
-    # 47: ModDest2Btn (Osc1 Pitch)    -> target 1
-    # 48: ModDest3Btn (Osc2 Pitch)    -> target 1
-    # 49: ModDest4Btn (Pulse Width)   -> target 2
+    # 46: ModDest1Btn -> target 0 (PW)
+    # 47: ModDest2Btn -> target 1 (Lfo1Amt)
+    # 48: ModDest3Btn -> target 2 (Osc1Level)
+    # 49: ModDest4Btn -> target 3 (Osc2Pitch)
     if len(floats) > 49:
         if floats[46] >= 0.5:
-            params["modTarget"] = 0.0  # Filter Cutoff
-        elif floats[47] >= 0.5 or floats[48] >= 0.5:
-            params["modTarget"] = 1.0  # Pitch
+            params["modTarget"] = 0.0  # PW
+        elif floats[47] >= 0.5:
+            params["modTarget"] = 1.0  # Lfo1Amt
+        elif floats[48] >= 0.5:
+            params["modTarget"] = 2.0  # Osc1Level
         elif floats[49] >= 0.5:
-            params["modTarget"] = 2.0  # Pulse Width
+            params["modTarget"] = 3.0  # Osc2Pitch
 
     # Flags: Bit 0 or Bit 1 = envLink (AmpCoupleFltBtn)
     if (flags & 0x01) or (flags & 0x02):
@@ -586,11 +588,13 @@ def map_delphi_wasp_integers_to_preset(
 
     # Mod Destination Buttons (Tags 46..49)
     if p[46] > 0:
-        params["modTarget"] = 0.0  # Filter
-    elif p[47] > 0 or p[48] > 0:
-        params["modTarget"] = 1.0  # Pitch
+        params["modTarget"] = 0.0  # PW
+    elif p[47] > 0:
+        params["modTarget"] = 1.0  # Lfo1Amt
+    elif p[48] > 0:
+        params["modTarget"] = 2.0  # Osc1Level
     elif p[49] > 0:
-        params["modTarget"] = 2.0  # Pulse Width
+        params["modTarget"] = 3.0  # Osc2Pitch
     else:
         params["modTarget"] = 0.0
 
@@ -639,19 +643,28 @@ def parse_fxp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
 
     if fx_magic == b"FxCk":
         # Regular Preset with Float Parameters
+        if len(data) < 56:
+            raise ValueError(f"Truncated FxCk header ({len(data)} bytes < 56)")
         num_params = struct.unpack(">i", data[24:28])[0]
+        if num_params <= 0 or num_params > 4096:
+            raise ValueError(f"Invalid FxCk num_params: {num_params}")
+        if 56 + num_params * 4 > len(data):
+            raise ValueError(f"Truncated FxCk parameter payload: need {56 + num_params * 4}, got {len(data)}")
         pr_name_raw = data[28:56]
         pr_name = pr_name_raw.split(b"\x00")[0].decode("latin1", errors="replace").strip()
         float_bytes = data[56:56 + num_params * 4]
-        floats = struct.unpack(f">{num_params}f", float_bytes)
+        raw_floats = struct.unpack(f">{num_params}f", float_bytes)
+        floats = [f if math.isfinite(f) else 0.0 for f in raw_floats]
         presets.append(map_float_list_to_preset(floats, pr_name or Path(filename).stem, "VST 2.4 FXP (FxCk)", filename))
 
     elif fx_magic == b"FPCh":
         # Opaque Chunk Preset
+        if len(data) < 60:
+            raise ValueError(f"Truncated FPCh header ({len(data)} bytes < 60)")
         num_params = struct.unpack(">i", data[24:28])[0]
         pr_name_raw = data[28:56]
         pr_name = pr_name_raw.split(b"\x00")[0].decode("latin1", errors="replace").strip()
-        chunk_size = struct.unpack(">I", data[56:60])[0]
+        chunk_size = min(struct.unpack(">I", data[56:60])[0], len(data) - 60)
         chunk_data = data[60:60 + chunk_size]
 
         # Scan chunk data for float parameters (try little-endian, then big-endian)
@@ -659,16 +672,25 @@ def parse_fxp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
         if not floats or len(floats) < 10:
             floats = parse_float_block(chunk_data, ">")
 
-        if not floats and len(chunk_data) >= 55:
+        if not floats and len(chunk_data) >= 32:
             # Possible raw byte knobs (0..255)
-            floats = [b / 255.0 for b in chunk_data[:55]]
+            floats = [b / 255.0 for b in chunk_data[:min(len(chunk_data), 55)]]
+
+        if not floats:
+            raise ValueError("FPCh chunk contains no valid parameter payload")
 
         presets.append(map_float_list_to_preset(floats, pr_name or Path(filename).stem, "VST 2.4 FXP (FPCh)", filename))
 
     elif fx_magic == b"FxBk":
         # Regular Bank
+        if len(data) < 160:
+            raise ValueError(f"Truncated FxBk header ({len(data)} bytes < 160)")
         num_programs = struct.unpack(">i", data[20:24])[0]
-        num_params = struct.unpack(">i", data[156:160])[0] if len(data) >= 160 else 55
+        if num_programs <= 0 or num_programs > 1024:
+            raise ValueError(f"Invalid FxBk num_programs: {num_programs}")
+        num_params = struct.unpack(">i", data[156:160])[0]
+        if num_params <= 0 or num_params > 256:
+            num_params = 55
         offset = 160
         for p in range(num_programs):
             if offset + 28 + num_params * 4 > len(data):
@@ -677,7 +699,8 @@ def parse_fxp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
             pr_name = pr_name_raw.split(b"\x00")[0].decode("latin1", errors="replace").strip()
             offset += 28
             float_bytes = data[offset:offset + num_params * 4]
-            floats = struct.unpack(f">{num_params}f", float_bytes)
+            raw_floats = struct.unpack(f">{num_params}f", float_bytes)
+            floats = [f if math.isfinite(f) else 0.0 for f in raw_floats]
             offset += num_params * 4
             presets.append(map_float_list_to_preset(
                 floats, pr_name or f"{Path(filename).stem}_{p + 1:02d}", "VST 2.4 FXB (FxBk)", filename
@@ -685,12 +708,16 @@ def parse_fxp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
 
     elif fx_magic == b"FBCh":
         # Opaque Bank Chunk
+        if len(data) < 160:
+            raise ValueError(f"Truncated FBCh header ({len(data)} bytes < 160)")
         num_programs = struct.unpack(">i", data[20:24])[0]
-        chunk_size = struct.unpack(">I", data[156:160])[0] if len(data) >= 160 else len(data) - 160
+        chunk_size = min(struct.unpack(">I", data[156:160])[0], len(data) - 160)
         chunk_data = data[160:160 + chunk_size]
         floats = parse_float_block(chunk_data, "<")
         if not floats:
             floats = parse_float_block(chunk_data, ">")
+        if not floats:
+            raise ValueError("FBCh bank chunk contains no valid parameter payload")
         presets.append(map_float_list_to_preset(floats, Path(filename).stem, "VST 2.4 FXB (FBCh)", filename))
 
     else:
@@ -877,21 +904,26 @@ def parse_fst_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
     raise ValueError(f"Unable to parse .fst state: unrecognized format in '{filename}'")
 
 
-def read_varint_from_buffer(buf: bytes, pos: int) -> Tuple[int, int]:
+def read_varint_from_buffer(buf: bytes, pos: int, end_pos: Optional[int] = None) -> Tuple[int, int]:
     """
-    Decodes an FLP variable-length integer (LEB128/varint) from buf starting at pos.
-    Returns (decoded_value, new_pos).
+    Decodes a 32-bit FLP variable-length integer (LEB128/varint) from buf starting at pos.
+    Rejects truncated varints or malformed >32-bit (>5 byte) varints with ValueError.
     """
+    limit = len(buf) if end_pos is None else min(len(buf), end_pos)
     result = 0
     shift = 0
-    while pos < len(buf):
+    while pos < limit:
         b = buf[pos]
         pos += 1
+        if shift == 28 and (b & 0xF0) != 0:
+            raise ValueError("Malformed FLP varint exceeds uint32 bounds")
         result |= (b & 0x7F) << shift
-        shift += 7
         if not (b & 0x80):
-            break
-    return result, pos
+            return result, pos
+        shift += 7
+        if shift > 28:
+            raise ValueError("Malformed FLP varint exceeds 5 bytes")
+    raise ValueError("Truncated FLP varint at end of stream")
 
 
 def parse_flp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
@@ -901,11 +933,13 @@ def parse_flp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
     identifying as Wasp or Wasp XT.
     """
     flhd_idx = data.find(b"FLhd")
-    if flhd_idx == -1:
-        raise ValueError("Invalid FLP: missing 'FLhd' header")
+    if flhd_idx == -1 or flhd_idx + 8 > len(data):
+        raise ValueError("Invalid FLP: missing or truncated 'FLhd' header")
 
     pos = flhd_idx
     header_len = struct.unpack("<I", data[pos + 4:pos + 8])[0]
+    if header_len > len(data) - (pos + 8):
+        raise ValueError("Truncated FLP header payload")
     pos += 8 + header_len
 
     if pos + 8 > len(data):
@@ -914,8 +948,8 @@ def parse_flp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
     data_magic = data[pos:pos + 4]
     if data_magic != b"FLdt":
         fldt_idx = data.find(b"FLdt", pos)
-        if fldt_idx == -1:
-            raise ValueError("Invalid FLP: missing 'FLdt' data chunk")
+        if fldt_idx == -1 or fldt_idx + 8 > len(data):
+            raise ValueError("Invalid FLP: missing or truncated 'FLdt' data chunk")
         pos = fldt_idx
 
     fldt_len = struct.unpack("<I", data[pos + 4:pos + 8])[0]
@@ -943,14 +977,21 @@ def parse_flp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
                 current_plugin_name = ""
 
         elif cmd < 128:  # 2-byte event
+            if end_pos - pos < 2:
+                break
             pos += 2
 
         elif cmd < 192:  # 4-byte event
+            if end_pos - pos < 4:
+                break
             pos += 4
 
         else:  # >= 192: Variable length chunk
-            chunk_len, pos = read_varint_from_buffer(data, pos)
-            if pos + chunk_len > end_pos:
+            try:
+                chunk_len, pos = read_varint_from_buffer(data, pos, end_pos)
+            except ValueError:
+                break
+            if chunk_len > end_pos - pos:
                 break
             chunk_bytes = data[pos:pos + chunk_len]
             pos += chunk_len
@@ -1003,27 +1044,40 @@ def parse_flp_data(data: bytes, filename: str = "") -> List[ParsedPreset]:
 
 
 def parse_xml_preset(data: bytes, filename: str = "") -> List[ParsedPreset]:
-    """Parses a native Bumbler XD or APVTS XML preset file."""
+    """Parses a native Bumbler XD or APVTS XML preset file with strict range & NaN sanitization."""
     try:
         root = ET.fromstring(data.decode("utf-8", errors="replace"))
-        name = root.attrib.get("name", Path(filename).stem)
+        if root.tag not in ("BumblerXD", "Parameters"):
+            raise ValueError(f"Unsupported XML root tag <{root.tag}>")
+        name = root.attrib.get("name", Path(filename).stem) or "Imported Preset"
         category = root.attrib.get("category", "Synth")
-        params: Dict[str, float] = {}
+        params: Dict[str, float] = {spec.id: spec.default_val for spec in ALL_55_PARAMS}
         for param_node in root.findall("PARAM"):
             pid = param_node.attrib.get("id")
-            val = param_node.attrib.get("value")
-            if pid and val:
+            val_str = param_node.attrib.get("value")
+            if pid in PARAM_SPEC_MAP and val_str is not None:
+                spec = PARAM_SPEC_MAP[pid]
                 try:
-                    params[pid] = float(val)
+                    parsed = float(val_str.strip())
+                    if math.isfinite(parsed):
+                        clamped = max(spec.min_val, min(spec.max_val, parsed))
+                        if spec.is_discrete:
+                            clamped = max(spec.min_val, min(spec.max_val, float(round(clamped))))
+                        params[pid] = clamped
+                    else:
+                        params[pid] = spec.default_val
                 except ValueError:
-                    pass
-        return [ParsedPreset(
+                    params[pid] = spec.default_val
+        preset = ParsedPreset(
             name=name,
             category=category,
             parameters=params,
             source_format="Bumbler XD APVTS XML",
             source_file=filename
-        )]
+        )
+        if preset.category == "Synth":
+            preset.category = preset.auto_classify_category()
+        return [preset]
     except Exception as exc:
         raise ValueError(f"Failed to parse XML preset '{filename}': {exc}")
 

@@ -125,6 +125,13 @@ BumblerVoice* BumblerVoiceManager::allocateVoice(int midiNote) noexcept {
     return &mVoices[0];
 }
 
+void BumblerVoiceManager::syncTriggerParameters(const ParameterSnapshot& params) noexcept {
+    mAnalogMode = (params.analogMode >= 0.5f);
+    for (auto& v : mVoices) {
+        v.syncTriggerParameters(params);
+    }
+}
+
 void BumblerVoiceManager::noteOn(int midiNote, float velocity) noexcept {
     if (velocity <= 0.0f) {
         noteOff(midiNote, 0.0f);
@@ -154,9 +161,8 @@ void BumblerVoiceManager::noteOff(int midiNote, float velocity) noexcept {
 void BumblerVoiceManager::setSustainPedal(bool pedalDown) noexcept {
     mSustainPedal = pedalDown;
     if (!mSustainPedal) {
-        // Release all notes held by the sustain pedal
-        for (int i = 0; i < mMaxPolyphony; ++i) {
-            auto& v = mVoices[static_cast<size_t>(i)];
+        // Release all notes held by the sustain pedal across the entire voice pool
+        for (auto& v : mVoices) {
             if (v.isActive() && v.isPedalLatched()) {
                 v.setPedalLatched(false);
                 v.noteOff(0.0f);
@@ -166,19 +172,23 @@ void BumblerVoiceManager::setSustainPedal(bool pedalDown) noexcept {
 }
 
 void BumblerVoiceManager::setPitchBend(float semitones) noexcept {
-    mPitchBendSemitones = semitones;
-    for (int i = 0; i < mMaxPolyphony; ++i) {
-        mVoices[static_cast<size_t>(i)].setPitchBend(mPitchBendSemitones);
+    mPitchBendSemitones = isFiniteBitwise(semitones) ? std::clamp(semitones, -48.0f, 48.0f) : 0.0f;
+    for (auto& v : mVoices) {
+        v.setPitchBend(mPitchBendSemitones);
     }
 }
 
 void BumblerVoiceManager::allNotesOff(bool fastKill) noexcept {
-    for (int i = 0; i < mMaxPolyphony; ++i) {
+    mSustainPedal = false;
+    for (auto& v : mVoices) {
         if (fastKill) {
-            mVoices[static_cast<size_t>(i)].forceKill();
+            v.forceKill();
         } else {
-            mVoices[static_cast<size_t>(i)].noteOff(0.0f);
+            v.noteOff(0.0f);
         }
+    }
+    if (fastKill) {
+        mCharacterCircuits.reset();
     }
 }
 

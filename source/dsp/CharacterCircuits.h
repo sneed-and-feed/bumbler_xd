@@ -18,7 +18,7 @@ public:
     DistortionUnit() noexcept = default;
 
     void prepare(double sampleRate) noexcept {
-        mSampleRate = static_cast<float>(sampleRate > 100.0 ? sampleRate : 48000.0);
+        mSampleRate = static_cast<float>((isFiniteBitwiseDouble(sampleRate) && sampleRate > 100.0) ? sampleRate : 48000.0);
         mSampleRateScale = 48000.0f / mSampleRate;
         reset();
     }
@@ -32,12 +32,14 @@ public:
      * Process a single audio sample (inlined for real-time DSP performance).
      */
     [[nodiscard]] inline float processSample(float in, float drive, float tone, bool enabled) noexcept {
-        if (!enabled || drive <= 0.001f) {
-            return in;
+        const float safeIn = isFiniteBitwise(in) ? in : 0.0f;
+        const float safeDrive = isFiniteBitwise(drive) ? std::clamp(drive, 0.0f, 1.0f) : 0.0f;
+        if (!enabled || safeDrive <= 0.001f) {
+            return safeIn;
         }
 
-        const float preGain = 1.0f + drive * 8.0f;
-        const float x = in * preGain;
+        const float preGain = 1.0f + safeDrive * 8.0f;
+        const float x = safeIn * preGain;
 
         // Asymmetric non-linear saturation curve producing rich 2nd and 3rd harmonics.
         // Clamp to prevent quadratic turnaround inversion on extreme negative excursions.
@@ -45,7 +47,7 @@ public:
         const float sat = std::tanh(u);
 
         // 1-pole Tone filter: alpha scales from dark (0.05) to bright (0.90)
-        const float toneNorm = std::clamp(tone, 0.0f, 1.0f);
+        const float toneNorm = std::clamp(isFiniteBitwise(tone) ? tone : 0.5f, 0.0f, 1.0f);
         const float alpha = std::clamp((0.05f + 0.85f * toneNorm) * mSampleRateScale, 0.005f, 0.99f);
 
         mFilterStateL += alpha * (sat - mFilterStateL);
@@ -90,7 +92,7 @@ public:
     DualModeVoiceDoubler() noexcept = default;
 
     void prepare(double sampleRate) noexcept {
-        mSampleRate = static_cast<float>(sampleRate > 100.0 ? sampleRate : 48000.0);
+        mSampleRate = static_cast<float>((isFiniteBitwiseDouble(sampleRate) && sampleRate > 100.0) ? sampleRate : 48000.0);
         // 5ms Haas decorrelation delay
         mDelaySamples = std::clamp(static_cast<int>(0.005f * mSampleRate + 0.5f), 1, 2048);
         reset();
@@ -250,12 +252,13 @@ public:
     CharacterCircuits() noexcept = default;
 
     void prepare(double sampleRate, int maxBlockSize = 512) noexcept {
-        mSampleRate = sampleRate;
-        mMaxBlockSize = maxBlockSize;
-        mDistortion.prepare(sampleRate);
-        mDualMode.prepare(sampleRate);
-        mDcBlockerL.setSampleRate(static_cast<float>(sampleRate), 10.0f);
-        mDcBlockerR.setSampleRate(static_cast<float>(sampleRate), 10.0f);
+        const double safeFs = (isFiniteBitwiseDouble(sampleRate) && sampleRate > 100.0) ? sampleRate : 48000.0;
+        mSampleRate = safeFs;
+        mMaxBlockSize = std::clamp(maxBlockSize, 1, 8192);
+        mDistortion.prepare(safeFs);
+        mDualMode.prepare(safeFs);
+        mDcBlockerL.setSampleRate(static_cast<float>(safeFs), 10.0f);
+        mDcBlockerR.setSampleRate(static_cast<float>(safeFs), 10.0f);
         reset();
     }
 

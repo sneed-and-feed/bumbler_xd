@@ -21,20 +21,24 @@ void BumblerEngine::reset() noexcept {
 }
 
 void BumblerEngine::processMidiEvent(int status, int noteNumber, float velocity) noexcept {
+    const float safeVel = isFiniteBitwise(velocity) ? velocity : 0.0f;
     const int command = status & 0xF0;
     if (command == 0x90) { // Note On
-        if (velocity > 0.0f) {
-            mVoiceManager.noteOn(noteNumber, velocity);
+        if (safeVel > 0.0f) {
+            mVoiceManager.noteOn(noteNumber, safeVel);
         } else {
             mVoiceManager.noteOff(noteNumber, 0.0f);
         }
     } else if (command == 0x80) { // Note Off
-        mVoiceManager.noteOff(noteNumber, velocity);
+        mVoiceManager.noteOff(noteNumber, safeVel);
     } else if (command == 0xB0) { // Control Change
         if (noteNumber == 64) { // Sustain Pedal
-            mVoiceManager.setSustainPedal(velocity >= 0.5f);
-        } else if (noteNumber == 120 || noteNumber == 123) { // All Sound/Notes Off
+            mVoiceManager.setSustainPedal(safeVel >= 0.5f);
+        } else if (noteNumber == 120 || noteNumber == 123) { // All Sound Off (120) / All Notes Off (123)
             mVoiceManager.allNotesOff(noteNumber == 120);
+        } else if (noteNumber == 121) { // Reset All Controllers
+            mVoiceManager.setSustainPedal(false);
+            mVoiceManager.setPitchBend(0.0f);
         }
     } else if (command == 0xE0) { // Pitch Bend
         // ====================================================================
@@ -58,7 +62,7 @@ void BumblerEngine::processMidiEvent(int status, int noteNumber, float velocity)
         //    the standard synthesizer pitch bend range of +/- 2.0 semitones:
         //      semitones = normalized * 2.0f  (range: [-2.0f, +2.0f] semitones)
         // ====================================================================
-        mVoiceManager.setPitchBend(velocity * 2.0f);
+        mVoiceManager.setPitchBend(std::clamp(safeVel, -1.0f, 1.0f) * 2.0f);
     }
 }
 

@@ -275,7 +275,7 @@ class TestSyntheticFSTAndFLPParsing(unittest.TestCase):
         floats = [0.0] * 56
         floats[22] = 0.75  # filterCutoff: 0.75 norm -> ~3556 Hz
         floats[14] = 0.80  # ampSustain
-        floats[49] = 1.0   # modDest4 (Pulse Width) -> modTarget = 2.0
+        floats[49] = 1.0   # modDest4 (Osc2Pitch) -> modTarget = 3.0
         for f in floats:
             native_chunk.extend(struct.pack("<f", f))
         native_chunk.append(0x01)  # flags: envLink = 1
@@ -297,7 +297,7 @@ class TestSyntheticFSTAndFLPParsing(unittest.TestCase):
         self.assertEqual(p.name, "Afraid Of The Dark Pad")
         self.assertAlmostEqual(p.parameters["filterCutoff"], 3556.56, places=1)
         self.assertEqual(p.parameters["envLink"], 1.0)
-        self.assertEqual(p.parameters["modTarget"], 2.0)
+        self.assertEqual(p.parameters["modTarget"], 3.0)
         self.assertEqual(p.source_format, "FL Studio Wasp XT Native (State v13)")
 
     def test_delphi_native_wasp_fst_parsing(self):
@@ -502,6 +502,82 @@ class TestMigratorGUIAndLauncher(unittest.TestCase):
         parser = build_arg_parser()
         args = parser.parse_args(["--gui"])
         self.assertTrue(args.gui)
+
+
+class TestV110HardeningRegressions(unittest.TestCase):
+    """v1.1.0 regression tests for adversarial FXP/FLP bounds, XML clamping, and bijective ModDest mapping."""
+
+    def test_all_four_mod_dest_buttons_float_and_delphi(self):
+        """Tags 46..49 must map bijectively to 0.0 (PW), 1.0 (Lfo1Amt), 2.0 (Osc1Level), 3.0 (Osc2Pitch)."""
+        from scripts.import_wasp_presets import (
+            map_delphi_wasp_integers_to_preset,
+            map_native_wasp_floats_to_preset,
+        )
+        for idx, expected_target in ((46, 0.0), (47, 1.0), (48, 2.0), (49, 3.0)):
+            floats = [0.0] * 56
+            floats[idx] = 1.0
+            pf = map_native_wasp_floats_to_preset(floats, f"FloatBtn{idx}", "Test", "test.fst", 0)
+            self.assertEqual(pf.parameters["modTarget"], expected_target)
+
+            ints = [0] * 56
+            ints[idx] = 1
+            pi = map_delphi_wasp_integers_to_preset(ints, f"DelphiBtn{idx}", "Test", "test.fst", 0)
+            self.assertEqual(pi.parameters["modTarget"], expected_target)
+
+    def test_malformed_fxp_headers_rejected_cleanly(self):
+        """Negative/overflowing num_params and truncated FxCk/FPCh/FxBk buffers must raise ValueError cleanly."""
+        # Negative num_params (-10)
+        bad_neg = struct.pack(">4s I 4s i 4s i i", b"CcnK", 60, b"FxCk", 1, b"Wasp", 100, -10) + b"\x00" * 32
+        with self.assertRaises(ValueError):
+            parse_fxp_data(bad_neg, "neg.fxp")
+
+        # Huge num_params (99999)
+        bad_huge = struct.pack(">4s I 4s i 4s i i", b"CcnK", 60, b"FxCk", 1, b"Wasp", 100, 99999) + b"\x00" * 32
+        with self.assertRaises(ValueError):
+            parse_fxp_data(bad_huge, "huge.fxp")
+
+        # Truncated FxCk (< 56 bytes)
+        trunc_fxck = struct.pack(">4s I 4s i 4s i i", b"CcnK", 30, b"FxCk", 1, b"Wasp", 100, 55) + b"Short"
+        with self.assertRaises(ValueError):
+            parse_fxp_data(trunc_fxck, "trunc.fxp")
+
+        # Negative num_programs in FxBk
+        bad_fxb = struct.pack(">4s I 4s i 4s i", b"CcnK", 200, b"FxBk", 1, b"Wasp", -5) + b"\x00" * 160
+        with self.assertRaises(ValueError):
+            parse_fxp_data(bad_fxb, "neg_bank.fxb")
+
+    def test_malformed_varint_in_flp_stream_safe(self):
+        """A 6-byte continuation varint (>32 bits) in FLdt must terminate cleanly without crash."""
+        flhd = b"FLhd" + struct.pack("<I", 6) + struct.pack("<HHH", 0, 1, 96)
+        events = bytearray([213, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01])
+        fldt = b"FLdt" + struct.pack("<I", len(events)) + bytes(events)
+        presets = parse_flp_data(flhd + fldt, "corrupt_varint.flp")
+        self.assertEqual(presets, [])
+
+    def test_xml_preset_nan_and_out_of_range_clamping(self):
+        """parse_xml_preset must clamp out-of-range values and replace NaN/Inf/garbage with APVTS defaults."""
+        from scripts.import_wasp_presets import parse_xml_preset
+        xml_bytes = (
+            b'<?xml version="1.0" encoding="utf-8"?>'
+            b'<BumblerXD schemaVersion="1" name="Hostile XML" category="Lead">'
+            b'  <PARAM id="filterCutoff" value="NaN"/>'
+            b'  <PARAM id="filterResonance" value="999.0"/>'
+            b'  <PARAM id="osc1Octave" value="-99.0"/>'
+            b'  <PARAM id="modAmount" value="-Infinity"/>'
+            b'  <PARAM id="pulseWidth" value="0.00001"/>'
+            b'  <PARAM id="unknownHostileId" value="12345.0"/>'
+            b'</BumblerXD>'
+        )
+        presets = parse_xml_preset(xml_bytes, "hostile.xml")
+        self.assertEqual(len(presets), 1)
+        p = presets[0].parameters
+        self.assertEqual(len(p), 55)
+        self.assertNotIn("unknownHostileId", p)
+        self.assertEqual(p["filterCutoff"], PARAM_SPEC_MAP["filterCutoff"].default_val)
+        self.assertEqual(p["filterResonance"], 1.0)
+        self.assertEqual(p["osc1Octave"], -3.0)
+        self.assertEqual(p["modAmount"], PARAM_SPEC_MAP["modAmount"].default_val)
+        self.assertEqual(p["pulseWidth"], 0.01)
 
 
 if __name__ == "__main__":

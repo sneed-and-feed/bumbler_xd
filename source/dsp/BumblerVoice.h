@@ -24,6 +24,7 @@ public:
     void reset() noexcept;
 
     // Trigger & Note State
+    void syncTriggerParameters(const ParameterSnapshot& params) noexcept;
     void noteOn(int midiNote, float velocity, uint64_t triggerSample) noexcept;
     void noteOn(int midiNote, float velocity, uint64_t triggerSample, bool analogMode) noexcept;
     void noteOff(float velocity = 0.0f) noexcept;

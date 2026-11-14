@@ -3,7 +3,7 @@
 namespace bumbler {
 
 void BumblerLFO::prepare(double sampleRate) noexcept {
-    mSampleRate = (sampleRate > 100.0) ? sampleRate : 48000.0;
+    mSampleRate = (isFiniteBitwiseDouble(sampleRate) && sampleRate > 100.0) ? sampleRate : 48000.0;
     reset();
 }
 
@@ -17,7 +17,8 @@ void BumblerLFO::reset() noexcept {
 }
 
 void BumblerLFO::setRate(float rateHz) noexcept {
-    const float clamped = std::clamp(rateHz, 0.01f, 30.0f);
+    const float safeRate = isFiniteBitwise(rateHz) ? rateHz : 2.0f;
+    const float clamped = std::clamp(safeRate, 0.01f, 30.0f);
     if (clamped != mRateHz) {
         mRateHz = clamped;
         updatePhaseIncrement();
@@ -25,10 +26,14 @@ void BumblerLFO::setRate(float rateHz) noexcept {
 }
 
 void BumblerLFO::setDelay(float delaySeconds) noexcept {
-    const float clamped = std::clamp(delaySeconds, 0.0f, 5.0f);
+    const float safeDelay = isFiniteBitwise(delaySeconds) ? delaySeconds : 0.0f;
+    const float clamped = std::clamp(safeDelay, 0.0f, 5.0f);
     if (clamped != mDelaySeconds) {
         mDelaySeconds = clamped;
         mDelaySamplesTotal = static_cast<int>(mDelaySeconds * static_cast<float>(mSampleRate));
+        if (mDelaySamplesRemaining > mDelaySamplesTotal) {
+            mDelaySamplesRemaining = mDelaySamplesTotal;
+        }
     }
 }
 
@@ -41,17 +46,18 @@ void BumblerLFO::setWaveform(int waveIndex) noexcept {
 }
 
 void BumblerLFO::setTempoSync(bool syncEnabled, float syncDivisionIndex, float hostBpm) noexcept {
-    const float validBpm = (std::isfinite(hostBpm) && hostBpm > 20.0f && hostBpm < 400.0f) ? hostBpm : 120.0f;
-    if (mTempoSync != syncEnabled || mSyncDivision != syncDivisionIndex || mHostBpm != validBpm) {
+    const float safeDiv = isFiniteBitwise(syncDivisionIndex) ? std::clamp(syncDivisionIndex, 0.0f, 5.0f) : 3.0f;
+    const float validBpm = (isFiniteBitwise(hostBpm) && hostBpm > 20.0f && hostBpm < 400.0f) ? hostBpm : 120.0f;
+    if (mTempoSync != syncEnabled || mSyncDivision != safeDiv || mHostBpm != validBpm) {
         mTempoSync = syncEnabled;
-        mSyncDivision = syncDivisionIndex;
+        mSyncDivision = safeDiv;
         mHostBpm = validBpm;
         updatePhaseIncrement();
     }
 }
 
 void BumblerLFO::setTempo(float hostBpm) noexcept {
-    const float validBpm = (std::isfinite(hostBpm) && hostBpm > 20.0f && hostBpm < 400.0f) ? hostBpm : 120.0f;
+    const float validBpm = (isFiniteBitwise(hostBpm) && hostBpm > 20.0f && hostBpm < 400.0f) ? hostBpm : 120.0f;
     if (mHostBpm != validBpm) {
         mHostBpm = validBpm;
         if (mTempoSync) {
@@ -65,13 +71,16 @@ void BumblerLFO::setKeyReset(bool resetEnabled) noexcept {
 }
 
 void BumblerLFO::setAmount(float amount) noexcept {
-    mAmount = std::clamp(amount, 0.0f, 1.0f);
+    const float safeAmt = isFiniteBitwise(amount) ? amount : 0.0f;
+    mAmount = std::clamp(safeAmt, 0.0f, 1.0f);
 }
 
 void BumblerLFO::setParams(double rateHz, double delaySeconds, RefWave wave, double sampleRate) noexcept {
-    mSampleRate = (sampleRate > 100.0) ? sampleRate : 48000.0;
-    mRateHz = std::clamp(static_cast<float>(rateHz), 0.01f, 30.0f);
-    mDelaySeconds = std::clamp(static_cast<float>(delaySeconds), 0.0f, 5.0f);
+    mSampleRate = (isFiniteBitwiseDouble(sampleRate) && sampleRate > 100.0) ? sampleRate : 48000.0;
+    const float safeRate = isFiniteBitwiseDouble(rateHz) ? static_cast<float>(rateHz) : 2.0f;
+    const float safeDelay = isFiniteBitwiseDouble(delaySeconds) ? static_cast<float>(delaySeconds) : 0.0f;
+    mRateHz = std::clamp(safeRate, 0.01f, 30.0f);
+    mDelaySeconds = std::clamp(safeDelay, 0.0f, 5.0f);
     // Map RefWave: SINE=0 -> Sine, SAW=1 -> Saw, SQUARE=2 -> Square, NOISE=3 -> Noise
     switch (wave) {
         case SINE:   mWaveform = LfoWaveform::Sine; break;
@@ -86,9 +95,11 @@ void BumblerLFO::setParams(double rateHz, double delaySeconds, RefWave wave, dou
 }
 
 void BumblerLFO::setParams(double rateHz, double delaySeconds, LfoWaveform wave, double sampleRate) noexcept {
-    mSampleRate = (sampleRate > 100.0) ? sampleRate : 48000.0;
-    mRateHz = std::clamp(static_cast<float>(rateHz), 0.01f, 30.0f);
-    mDelaySeconds = std::clamp(static_cast<float>(delaySeconds), 0.0f, 5.0f);
+    mSampleRate = (isFiniteBitwiseDouble(sampleRate) && sampleRate > 100.0) ? sampleRate : 48000.0;
+    const float safeRate = isFiniteBitwiseDouble(rateHz) ? static_cast<float>(rateHz) : 2.0f;
+    const float safeDelay = isFiniteBitwiseDouble(delaySeconds) ? static_cast<float>(delaySeconds) : 0.0f;
+    mRateHz = std::clamp(safeRate, 0.01f, 30.0f);
+    mDelaySeconds = std::clamp(safeDelay, 0.0f, 5.0f);
     mWaveform = wave;
     mTempoSync = false;
     mAmount = 1.0f;

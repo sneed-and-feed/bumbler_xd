@@ -10,17 +10,17 @@ LCDGraphDisplay::LCDGraphDisplay(DisplayType type)
 }
 
 void LCDGraphDisplay::setEnvelopeParameters(float attackSec, float decaySec, float sustainLevel, float releaseSec) {
-    mAttack  = juce::jlimit(0.001f, 10.0f, attackSec);
-    mDecay   = juce::jlimit(0.001f, 10.0f, decaySec);
-    mSustain = juce::jlimit(0.0f, 1.0f, sustainLevel);
-    mRelease = juce::jlimit(0.001f, 10.0f, releaseSec);
+    mAttack  = juce::jlimit(0.001f, 10.0f, std::isfinite(attackSec) ? attackSec : 0.01f);
+    mDecay   = juce::jlimit(0.001f, 10.0f, std::isfinite(decaySec) ? decaySec : 0.30f);
+    mSustain = juce::jlimit(0.0f, 1.0f, std::isfinite(sustainLevel) ? sustainLevel : 0.80f);
+    mRelease = juce::jlimit(0.001f, 10.0f, std::isfinite(releaseSec) ? releaseSec : 0.30f);
 
     buildEnvelopePath(getLocalBounds().toFloat());
     repaint();
 }
 
 void LCDGraphDisplay::setFilterModulationStatus(float envAmount, bool isLinked) {
-    mEnvAmount = envAmount;
+    mEnvAmount = std::isfinite(envAmount) ? juce::jlimit(-1.0f, 1.0f, envAmount) : 0.0f;
     mIsLinked = isLinked;
     repaint();
 }
@@ -44,6 +44,9 @@ void LCDGraphDisplay::buildEnvelopePath(juce::Rectangle<float> area) {
     const float plotY = area.getY() + headerH;
     const float plotH = area.getHeight() - headerH - footerH;
 
+    if (plotW <= 4.0f || plotH <= 4.0f)
+        return;
+
     const float yBase = plotY + plotH;
     const float yPeak = plotY + 2.0f;
     const float hUsable = yBase - yPeak;
@@ -55,11 +58,21 @@ void LCDGraphDisplay::buildEnvelopePath(juce::Rectangle<float> area) {
     const float logS = 0.25f; // Constant representation for sustain stage
     const float logR = std::log10(1.0f + 9.0f * (mRelease / 10.0f));
 
-    const float totalLog = logA + logD + logS + logR;
-    const float wA = juce::jmax(12.0f, (logA / totalLog) * plotW);
-    const float wD = juce::jmax(12.0f, (logD / totalLog) * plotW);
-    const float wS = juce::jmax(15.0f, (logS / totalLog) * plotW);
-    const float wR = juce::jmax(12.0f, plotW - (wA + wD + wS));
+    const float totalLog = juce::jmax(1.0e-4f, logA + logD + logS + logR);
+    float wA = juce::jmax(8.0f, (logA / totalLog) * plotW);
+    float wD = juce::jmax(8.0f, (logD / totalLog) * plotW);
+    float wS = juce::jmax(10.0f, (logS / totalLog) * plotW);
+    float wR = juce::jmax(8.0f, (logR / totalLog) * plotW);
+
+    // Normalize stage widths so x4 = plotX + plotW strictly without overflowing LCD bezel
+    const float sumW = wA + wD + wS + wR;
+    if (sumW > 0.0f) {
+        const float scale = plotW / sumW;
+        wA *= scale;
+        wD *= scale;
+        wS *= scale;
+        wR = plotW - (wA + wD + wS);
+    }
 
     const float x0 = plotX;
     const float x1 = x0 + wA;

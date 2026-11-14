@@ -6,7 +6,7 @@
 ![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)
 ![JUCE](https://img.shields.io/badge/JUCE-8.0.6-orange.svg)
 ![Build](https://img.shields.io/badge/Build-Passing-brightgreen.svg)
-![CTest](https://img.shields.io/badge/Tests-23%2F23%20Passed-success.svg)
+![CTest](https://img.shields.io/badge/Tests-24%2F24%20Passed-success.svg)
 ![Coverage](https://img.shields.io/badge/Tiers%201--5-400%2B%20Tests-success.svg)
 ![Formats](https://img.shields.io/badge/Formats-VST3%20%7C%20Standalone%20%7C%20CLI-purple.svg)
 ![License](https://img.shields.io/badge/License-MIT-green.svg)
@@ -35,7 +35,7 @@
 ### 🎛️ Sound Generation & 3-Oscillator Engine
 - **OSC 1 & OSC 2:** Multi-waveform generators supporting Sawtooth, Pulse/Square (with variable Pulse Width), Sine, and Noise/Wavetable. Coarse tuning ($\pm 3$ octaves) and fine tuning ($\pm 1$ semitone).
 - **OSC Mix:** Continuous horizontal balance slider smoothly blending OSC 1 and OSC 2.
-- **OSC 3:** Dedicated auxiliary sub-oscillator (Square or Sawtooth) with independent volume amount.
+- **OSC 3:** Dedicated auxiliary oscillator (Square or Sawtooth) tracking the voice fundamental with independent volume amount.
 - **Inter-Oscillator Modulation:**
   - **Ring Modulator:** Modulates OSC 1 and OSC 2 with internal highpass DC blocking to eliminate bias runaway, producing signature metallic and inharmonic timbres.
   - **Frequency Modulation (FM):** Linear audio-rate modulation of OSC 2 by OSC 1 with Bessel-harmonic sideband expansion.
@@ -55,7 +55,7 @@ Modeled using Zero-Delay Feedback (ZDF) State-Variable Filters with trapezoidal 
 ### 🌊 Dual LFOs & Envelopes
 - **Dual Multi-Waveform LFOs:** Sawtooth, Square, Sine, and Sample & Hold Noise waveforms.
   - **64-bit IEEE Double-Precision Phase Accumulation:** $0.00000\%$ timing drift over 384,000 samples at 96 kHz.
-  - 6 tempo-sync musical divisions, exponential delay onset ramp, and note-on phase reset.
+  - 6 tempo-sync musical divisions, pre-modulation onset delay (0 to 5 s), and note-on phase reset.
   - **LFO 1 Destinations:** Pitch (OSC 1+2), Filter Cutoff, or Pulse Width (PW).
   - **LFO 2 Destinations:** OSC 1 Pitch, OSC Mix ratio, or Master Amplitude.
 - **Dual ADSR Envelopes:** Independent 4-stage curves for Amp and Filter with reciprocal UI `LINK` toggle.
@@ -114,10 +114,10 @@ cd bumbler_xd
 # Configure CMake with Visual Studio 2022 generator (x64)
 cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release -DBUMBLER_BUILD_TESTS=ON
 
-# Compile Standalone, VST3 plugin, headless CLI example, and all 22 CTest test targets
+# Compile Standalone, VST3 plugin, headless CLI example, and all 24 CTest test targets
 cmake --build build --config Release --parallel
 
-# Execute the complete automated verification suite (22 test suites)
+# Execute the complete automated verification suite (24 test suites)
 ctest --test-dir build -C Release --output-on-failure
 ```
 
@@ -357,7 +357,7 @@ ctest --test-dir build -C Release -R GoldenVectorTests --output-on-failure
 
 Bumbler XD implements an exhaustive, requirement-driven verification harness governed by the authoritative specification in [tests/TEST_INFRA.md](tests/TEST_INFRA.md). Testing adheres to a strict opaque-box philosophy with zero tolerance for facades, mock circumventions, or synthetic always-pass assertions.
 
-The verification space spans **400+ distinct test cases across 36 functional features (F1–F36)**, partitioned across five progressive tiers and packaged into 22 standalone native C++20 CTest targets:
+The verification space spans **400+ distinct test cases across 36 functional features (F1–F36)**, partitioned across five progressive tiers and packaged into 24 standalone native C++20 CTest targets (plus 22 Python preset migrator unit tests):
 
 - **Tier 1: Feature Coverage (N = 180 tests)**  
   Validates baseline functionality and happy paths across all 36 features ($\ge 5$ isolated unit tests per feature). Full specification: [tests/TEST_INFRA.md § 3.1](tests/TEST_INFRA.md#31-tier-1-feature-coverage-n--180-tests).
@@ -382,7 +382,7 @@ The following granular test matrix maps all 36 features defined in `PROJECT.md` 
 | **F2** | Polyphonic Voice Manager | Voice Allocation | [`tests/dsp_unit_tests.cpp`](tests/dsp_unit_tests.cpp)<br>[`tests/m1_adversarial_stress_tests.cpp`](tests/m1_adversarial_stress_tests.cpp)<br>[`tests/challenger_m1_tests.cpp`](tests/challenger_m1_tests.cpp)<br>[`tests/e2e_headless_suite.cpp`](tests/e2e_headless_suite.cpp) | 16-voice polyphony saturation limit, deterministic LRU oldest-voice stealing, 5ms Hann crossfade de-clicking during voice reuse, 0 voice starvation | 100% Pass |
 | **F3** | OSC 1 Multi-waveform | Oscillator Core | [`tests/dsp_unit_tests.cpp`](tests/dsp_unit_tests.cpp)<br>[`tests/challenger_m1_tests.cpp`](tests/challenger_m1_tests.cpp)<br>[`tests/e2e_headless_suite.cpp`](tests/e2e_headless_suite.cpp) | Saw ($1/k$), Square (odd harmonics, even $<-40\text{ dB}$), Sine ($\text{THD} < 0.05\%$), Noise; $>41\text{ dB}$ PolyBLEP alias rejection at C7 ($2093\text{ Hz}$); coarse/fine tuning within $0.1$ cents | 100% Pass |
 | **F4** | OSC 2 Multi-waveform | Oscillator Core | [`tests/dsp_unit_tests.cpp`](tests/dsp_unit_tests.cpp)<br>[`tests/challenger_m1_tests.cpp`](tests/challenger_m1_tests.cpp)<br>[`tests/e2e_headless_suite.cpp`](tests/e2e_headless_suite.cpp) | Waveform selection (Saw, Square, Sine, Noise); coarse tuning across $-3$ to $+3$ octaves; fine tuning across $-100$ to $+100$ cents; $>41\text{ dB}$ anti-aliasing suppression above Nyquist | 100% Pass |
-| **F5** | OSC 3 Aux Sub-Osc | Oscillator Core | [`tests/dsp_unit_tests.cpp`](tests/dsp_unit_tests.cpp)<br>[`tests/challenger_m1_tests.cpp`](tests/challenger_m1_tests.cpp)<br>[`tests/e2e_headless_suite.cpp`](tests/e2e_headless_suite.cpp) | Square and Saw waveforms at 1 octave sub-division; zero audible bleed ($<-96\text{ dBFS}$) when level is 0.0; monotonic linear volume scaling; phase locked with OSC 1 | 100% Pass |
+| **F5** | OSC 3 Aux Sub-Osc | Oscillator Core | [`tests/dsp_unit_tests.cpp`](tests/dsp_unit_tests.cpp)<br>[`tests/challenger_m1_tests.cpp`](tests/challenger_m1_tests.cpp)<br>[`tests/e2e_headless_suite.cpp`](tests/e2e_headless_suite.cpp) | Square and Saw waveforms tracking voice fundamental; zero audible bleed ($<-96\text{ dBFS}$) when level is 0.0; monotonic linear volume scaling; phase locked with OSC 1 | 100% Pass |
 | **F6** | OSC Balance Slider | Audio Mixer | [`tests/dsp_unit_tests.cpp`](tests/dsp_unit_tests.cpp)<br>[`tests/e2e_headless_suite.cpp`](tests/e2e_headless_suite.cpp) | Slider at 0.0 delivers pure OSC 1, at 1.0 delivers pure OSC 2, at 0.5 delivers equal sum; monotonic crossfade gain law; zero clipping during transition | 100% Pass |
 | **F7** | Ring Modulator | Inter-Modulation | [`tests/dsp_unit_tests.cpp`](tests/dsp_unit_tests.cpp)<br>[`tests/modulation_tests.cpp`](tests/modulation_tests.cpp)<br>[`tests/m1_adversarial_stress_tests.cpp`](tests/m1_adversarial_stress_tests.cpp)<br>[`tests/e2e_headless_suite.cpp`](tests/e2e_headless_suite.cpp) | Analytical sum and difference ($f_1 + f_2 \text{ and } \vert f_1 - f_2 \vert$) sideband generation; carrier suppression $>40\text{ dB}$; DC offset $\vert \bar{x} \vert < 10^{-4}$ via internal DC blocker | 100% Pass |
 | **F8** | Pulse Width Modulation | Modulation | [`tests/dsp_unit_tests.cpp`](tests/dsp_unit_tests.cpp)<br>[`tests/challenger_m1_tests.cpp`](tests/challenger_m1_tests.cpp)<br>[`tests/m1_adversarial_stress_tests.cpp`](tests/m1_adversarial_stress_tests.cpp)<br>[`tests/e2e_headless_suite.cpp`](tests/e2e_headless_suite.cpp) | Pulse duty cycle verified across 25%, 50%, 75% within $\pm 3\%$; safe clamping within $[0.01, 0.99]$ without phase collapse or DC transients; LFO/MOD ENV modulation | 100% Pass |
@@ -444,12 +444,12 @@ Bumbler XD is architected to guarantee deterministic real-time audio thread safe
    - **Polyphony Throttling:** Polyphony can be dynamically throttled from 1 to 16 voices via `setPolyphonyLimit()` to reduce CPU utilization on mobile or embedded devices, but cannot exceed 16 voices without recompiling the core DSP library.
 
 2. **Channel-Global Pitch Bend & Continuous Controllers (No Per-Note MPE):**
-   - **Standard MIDI 1.0 Single-Channel Model:** Pitch wheel bending ($\pm 12$ semitones), sustain pedal latching (CC 64), and modulation wheel data apply globally to all currently sounding voices.
+   - **Standard MIDI 1.0 Single-Channel Model:** Pitch wheel bending ($\pm 2$ semitones), sustain pedal latching (CC 64), and MIDI panic / controller resets (CC 120 All Sound Off, CC 121 Reset All Controllers, CC 123 All Notes Off) apply globally across the voice pool.
    - **No MPE Support:** MIDI Polyphonic Expression (MPE / MIDI 2.0 per-note pitch bend, polyphonic aftertouch, and per-note timbre dimensions) is not supported in the current engine topology.
 
-3. **Filter Cutoff Frequency Clamping Bounds ($20.0\text{ Hz}$ to $20000.0\text{ Hz}$ / $0.49 \cdot f_s$):**
+3. **Filter Cutoff Frequency Clamping Bounds ($20.0\text{ Hz}$ to $0.48 \cdot f_s$, Base Parameter $20.0\text{ Hz}$ to $20000.0\text{ Hz}$):**
    - **ZDF SVF Numerical Stability:** The 6-mode Wasp filter uses bilinear trapezoidal integration with cutoff pre-warping $g = \tan(\pi f_c / f_s)$. Near the Nyquist limit (half the sample rate), the tangent function approaches infinity.
-   - **Safe Clamping Enclosure:** To prevent floating-point overflow and numerical loop divergence in the algebraic denominator $d = 1.0 + g(g + k)$, effective modulated cutoff frequencies are clamped to $[20.0\text{ Hz}, \min(20000.0\text{ Hz}, 0.49 \cdot f_s)]$, guaranteeing unconditional stability across all sample rates ($44.1\text{ kHz}$ to $384\text{ kHz}$).
+   - **Safe Clamping Enclosure:** While the APVTS base `filterCutoff` parameter spans $[20.0\text{ Hz}, 20000.0\text{ Hz}]$, effective modulated cutoff frequencies inside `WaspFilter` are clamped dynamically to $[20.0\text{ Hz}, 0.48 \cdot f_s]$ to prevent floating-point overflow and numerical loop divergence in the algebraic denominator $d = 1.0 + g(g + k)$, guaranteeing unconditional stability across all sample rates ($44.1\text{ kHz}$ to $384\text{ kHz}$).
 
 4. **Block-Rate APVTS Automation Snapshots:**
    - **Buffer-Boundary Synchronization:** Parameter exchange between DAW automation/GUI and the audio rendering thread occurs via lock-free atomic snapshot polling (`ParameterSnapshot`) evaluated once per audio block (`renderBlock()`).
@@ -478,8 +478,8 @@ python scripts/package_release.py
 ```
 
 Generated release artifacts in `releases/`:
-- `releases/BUMBLER_XD-v1.0.7-Windows-x64.zip` (Full package: Standalone + VST3 + Documentation)
-- `releases/BUMBLER_XD-v1.0.7-VST3-Windows-x64.zip` (VST3-only plugin package)
+- `releases/BUMBLER_XD-v1.1.0-Windows-x64.zip` (Full package: Standalone + VST3 + Migrator Tools + Documentation)
+- `releases/BUMBLER_XD-v1.1.0-VST3-Windows-x64.zip` (VST3-only plugin package)
 - `releases/SHA256SUMS.txt` (GNU `sha256sum`-compatible cryptographic manifest)
 
 ---
@@ -487,7 +487,7 @@ Generated release artifacts in `releases/`:
 ## CI/CD Workflow
 
 Automated testing and multi-platform compilation are orchestrated via GitHub Actions:
-- [`.github/workflows/ci.yml`](.github/workflows/ci.yml): Multi-platform CI matrix executing all 22 CTest suites on Windows (MSVC x64), macOS (Apple Silicon + Intel Universal binary), and Ubuntu Linux (GCC x64 with Xvfb headless virtual display).
+- [`.github/workflows/ci.yml`](.github/workflows/ci.yml): Multi-platform CI matrix executing all 24 CTest suites on Windows (MSVC x64), macOS (Apple Silicon + Intel Universal binary), and Ubuntu Linux (GCC x64 with Xvfb headless virtual display).
 - [`.github/workflows/release-builds.yml`](.github/workflows/release-builds.yml): Production distribution packaging and release asset uploads triggered upon version tags.
 
 ---

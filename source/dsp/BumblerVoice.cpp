@@ -42,6 +42,14 @@ void BumblerVoice::reset() noexcept {
     mStealSamplesRemaining = 0;
 }
 
+void BumblerVoice::syncTriggerParameters(const ParameterSnapshot& params) noexcept {
+    mAnalogMode = (params.analogMode >= 0.5f);
+    mLfo1.setDelay(params.lfo1Delay);
+    mLfo1.setKeyReset(params.lfo1KeyReset > 0.5f);
+    mLfo2.setDelay(params.lfo2Delay);
+    mLfo2.setKeyReset(params.lfo2KeyReset > 0.5f);
+}
+
 void BumblerVoice::noteOn(int midiNote, float velocity, uint64_t triggerSample) noexcept {
     noteOn(midiNote, velocity, triggerSample, mAnalogMode);
 }
@@ -236,7 +244,10 @@ void BumblerVoice::renderSample(float& outL, float& outR, const ParameterSnapsho
     // 6. 6-Mode Wasp XT Filter Processing
     float filteredOut = oscOut;
     if (mFilterEnabled) {
-        const auto mode = static_cast<WaspFilterMode>(static_cast<int>(params.filterMode));
+        const int safeModeIdx = std::clamp(
+            static_cast<int>(isFiniteBitwise(params.filterMode) ? params.filterMode : 1.0f),
+            0, 5);
+        const auto mode = static_cast<WaspFilterMode>(safeModeIdx);
         filteredOut = mFilter.processSample(oscOut, effectiveCutoff, params.filterResonance, mode);
     }
 

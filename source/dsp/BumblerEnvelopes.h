@@ -35,7 +35,7 @@ public:
     BumblerADSR() noexcept = default;
 
     void prepare(double sampleRate) noexcept {
-        mSampleRate = (sampleRate > 100.0) ? sampleRate : 48000.0;
+        mSampleRate = (isFiniteBitwiseDouble(sampleRate) && sampleRate > 100.0) ? sampleRate : 48000.0;
         reset();
     }
 
@@ -67,21 +67,26 @@ public:
     }
 
     void setParameters(float aSec, float dSec, float sLevel, float rSec) noexcept {
-        const float att = std::clamp(aSec, 0.0001f, 10.0f);
+        const float safeA = isFiniteBitwise(aSec) ? aSec : 0.01f;
+        const float safeD = isFiniteBitwise(dSec) ? dSec : 0.30f;
+        const float safeS = isFiniteBitwise(sLevel) ? sLevel : 0.80f;
+        const float safeR = isFiniteBitwise(rSec) ? rSec : 0.30f;
+
+        const float att = std::clamp(safeA, 0.0001f, 10.0f);
         if (std::abs(att - mCachedAttack) > 1.0e-5f) {
             mCachedAttack = att;
             mAttackRate = (att > 0.0005f) ? (1.0f / (att * static_cast<float>(mSampleRate))) : 1.0f;
         }
 
-        const float dec = std::clamp(dSec, 0.001f, 10.0f);
+        const float dec = std::clamp(safeD, 0.001f, 10.0f);
         if (std::abs(dec - mCachedDecay) > 1.0e-5f) {
             mCachedDecay = dec;
             mDecayCoeff = std::exp(-1.0f / (dec * static_cast<float>(mSampleRate) * 0.5f));
         }
 
-        mSustainLevel = std::clamp(sLevel, 0.0f, 1.0f);
+        mSustainLevel = std::clamp(safeS, 0.0f, 1.0f);
 
-        const float rel = std::clamp(rSec, 0.002f, 10.0f);
+        const float rel = std::clamp(safeR, 0.002f, 10.0f);
         if (std::abs(rel - mCachedRelease) > 1.0e-5f) {
             mCachedRelease = rel;
             mReleaseCoeff = std::exp(-1.0f / (rel * static_cast<float>(mSampleRate) * 0.5f));
@@ -89,7 +94,7 @@ public:
     }
 
     void update(float aSec, float dSec, float sLevel, float rSec, double sampleRate = 0.0) noexcept {
-        if (sampleRate > 100.0 && sampleRate != mSampleRate) {
+        if (isFiniteBitwiseDouble(sampleRate) && sampleRate > 100.0 && sampleRate != mSampleRate) {
             mSampleRate = sampleRate;
             mCachedAttack = -1.0f;
             mCachedDecay = -1.0f;
@@ -165,7 +170,7 @@ public:
     BumblerModEnvelope() noexcept = default;
 
     void prepare(double sampleRate) noexcept {
-        mSampleRate = (sampleRate > 100.0) ? sampleRate : 48000.0;
+        mSampleRate = (isFiniteBitwiseDouble(sampleRate) && sampleRate > 100.0) ? sampleRate : 48000.0;
         reset();
     }
 
@@ -184,22 +189,25 @@ public:
     }
 
     void setParameters(float aSec, float dSec, float amount, double sampleRate = 0.0) noexcept {
-        if (sampleRate > 100.0 && sampleRate != mSampleRate) {
+        if (isFiniteBitwiseDouble(sampleRate) && sampleRate > 100.0 && sampleRate != mSampleRate) {
             mSampleRate = sampleRate;
             mCachedAttack = -1.0f;
             mCachedDecay = -1.0f;
         }
-        const float att = std::max(0.0005f, aSec);
+        const float safeA = isFiniteBitwise(aSec) ? aSec : 0.05f;
+        const float safeD = isFiniteBitwise(dSec) ? dSec : 0.50f;
+        const float safeAmt = isFiniteBitwise(amount) ? amount : 0.0f;
+        const float att = std::clamp(safeA, 0.0005f, 10.0f);
         if (std::abs(att - mCachedAttack) > 1.0e-5f) {
             mCachedAttack = att;
             mAttackRate = 1.0f / (att * static_cast<float>(mSampleRate));
         }
-        const float dec = std::max(0.001f, dSec);
+        const float dec = std::clamp(safeD, 0.001f, 10.0f);
         if (std::abs(dec - mCachedDecay) > 1.0e-5f) {
             mCachedDecay = dec;
             mDecayCoeff = std::exp(-1.0f / (dec * static_cast<float>(mSampleRate) * 0.5f));
         }
-        mAmount = std::clamp(amount, -1.0f, 1.0f);
+        mAmount = std::clamp(safeAmt, -1.0f, 1.0f);
     }
 
     [[nodiscard]] float processSample() noexcept {

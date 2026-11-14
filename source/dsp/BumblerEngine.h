@@ -45,6 +45,14 @@ public:
     void reset() noexcept;
 
     /**
+     * Synchronizes trigger-time parameters (analogMode, LFO delay & key-reset)
+     * across the voice pool prior to processing incoming MIDI Note-On events.
+     */
+    void syncTriggerParameters(const ParameterSnapshot& params) noexcept {
+        mVoiceManager.syncTriggerParameters(params);
+    }
+
+    /**
      * Processes a single MIDI event. Expected to be called sequentially on the
      * audio thread ahead of or interleaved with sample rendering blocks.
      */

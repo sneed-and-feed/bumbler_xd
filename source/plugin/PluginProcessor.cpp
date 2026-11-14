@@ -46,15 +46,25 @@ void BumblerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         }
     }
 
-    // 2. Process incoming MIDI events through engine
+    // 2. Extract lock-free parameter snapshot (<15ns, 0 allocations, 0 lookups)
+    // and synchronize note-trigger parameters before MIDI Note-On dispatch so
+    // preset loads take effect immediately on sample-0 MIDI triggers.
+    const ParameterSnapshot snapshot = mAtomicPointers.loadSnapshot();
+    mEngine.syncTriggerParameters(snapshot);
+
+    // 3. Process incoming MIDI events through engine
     for (const auto metadata : midiMessages) {
         const auto msg = metadata.getMessage();
         if (msg.isNoteOn()) {
             mEngine.processMidiEvent(0x90, msg.getNoteNumber(), msg.getFloatVelocity());
         } else if (msg.isNoteOff()) {
             mEngine.processMidiEvent(0x80, msg.getNoteNumber(), msg.getFloatVelocity());
-        } else if (msg.isAllNotesOff() || msg.isAllSoundOff()) {
+        } else if (msg.isAllSoundOff()) {
+            mEngine.processMidiEvent(0xB0, 120, 0.0f);
+        } else if (msg.isAllNotesOff()) {
             mEngine.processMidiEvent(0xB0, 123, 0.0f);
+        } else if (msg.isResetAllControllers()) {
+            mEngine.processMidiEvent(0xB0, 121, 0.0f);
         } else if (msg.isPitchWheel()) {
             // ================================================================
             // 14-Bit MIDI Pitch Wheel Transformation:
@@ -79,18 +89,19 @@ void BumblerAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce:
         } else if (msg.isController()) {
             if (msg.getControllerNumber() == 64) { // Sustain pedal
                 mEngine.processMidiEvent(0xB0, 64, msg.getControllerValue() >= 64 ? 1.0f : 0.0f);
-            } else if (msg.getControllerNumber() == 120 || msg.getControllerNumber() == 123) {
+            } else if (msg.getControllerNumber() == 120 || msg.getControllerNumber() == 121 || msg.getControllerNumber() == 123) {
                 mEngine.processMidiEvent(0xB0, msg.getControllerNumber(), 0.0f);
             }
         }
     }
 
-    // 3. Extract lock-free parameter snapshot using cached atomic pointers (<15ns, 0 allocations, 0 lookups)
-    const ParameterSnapshot snapshot = mAtomicPointers.loadSnapshot();
-
     // 4. Render synthesizer audio into buffer
     const int numChannels = buffer.getNumChannels();
     const int numSamples = buffer.getNumSamples();
+    if (numSamples <= 0 || numChannels <= 0) {
+        return;
+    }
+
     float* const* channels = buffer.getArrayOfWritePointers();
 
     mEngine.renderBlock(channels, numChannels, numSamples, snapshot);
@@ -133,8 +144,13 @@ void BumblerAudioProcessor::changeProgramName(int, const juce::String&) {
 void BumblerAudioProcessor::applyParameterSnapshot(const ParameterSnapshot& p) {
     auto setParam = [this](const juce::ParameterID& id, float value) {
         if (auto* param = mApvts.getParameter(id.getParamID())) {
-            const auto range = mApvts.getParameterRange(id.getParamID());
-            param->setValueNotifyingHost(range.convertTo0to1(value));
+            if (!std::isfinite(value)) {
+                param->setValueNotifyingHost(param->getDefaultValue());
+            } else {
+                const auto range = mApvts.getParameterRange(id.getParamID());
+                const float clamped = juce::jlimit(range.start, range.end, value);
+                param->setValueNotifyingHost(range.convertTo0to1(clamped));
+            }
         }
     };
 
@@ -329,7 +345,8 @@ void BumblerAudioProcessor::setStateInformation(const void* data, int sizeInByte
 
     if (vt.hasProperty("programIndex")) {
         const int pIdx = static_cast<int>(vt.getProperty("programIndex"));
-        if (pIdx >= 0 && pIdx < getNumPrograms()) {
+        const int totalBuiltInPresets = getNumPrograms() + static_cast<int>(getMigratedPresets().size());
+        if (pIdx >= 0 && pIdx < totalBuiltInPresets) {
             mCurrentProgramIndex.store(pIdx, std::memory_order_relaxed);
         }
     }

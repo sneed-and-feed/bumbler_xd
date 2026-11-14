@@ -39,6 +39,7 @@ public:
     void timerCallback() override;
 
     void refreshPresetMenu();
+    [[nodiscard]] int getSelectedPresetComboId() const noexcept { return mPresetComboBox.getSelectedId(); }
     void showMigrateMenu(juce::Point<int> screenPos);
     void migrateFilesAndLoad(const juce::Array<juce::File>& files);
     void showStatusToast(const juce::String& message, bool isError = false);
@@ -103,6 +104,7 @@ private:
     bool         mToastIsError { false };
     float        mToastAlpha { 0.0f };
     int          mToastCountdown { 0 };
+    int          mLastSyncedProgram { -2 };
     std::atomic<bool> mLcdUpdatePending { false };
 
     struct UserPresetItem {

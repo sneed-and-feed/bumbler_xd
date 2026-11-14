@@ -1,20 +1,32 @@
+import hashlib
 import os
 import zipfile
-import hashlib
+from pathlib import Path
 
-root_dir = r"c:\Users\x\Documents\antigravity\bumbler_xd"
+root_dir = str(Path(__file__).resolve().parent.parent)
 release_dir = os.path.join(root_dir, "releases")
 build_dir = os.path.join(root_dir, "build", "BumblerXD_artefacts", "Release")
 
 os.makedirs(release_dir, exist_ok=True)
-version = "1.0.7"
+version = "1.1.0"
+
+full_zip_name = f"BUMBLER_XD-v{version}-Windows-x64.zip"
+vst3_zip_name = f"BUMBLER_XD-v{version}-VST3-Windows-x64.zip"
+active_archives = {full_zip_name, vst3_zip_name}
+
+# Remove stale release archives from older versions so releases/ stays clean
+for existing in os.listdir(release_dir):
+    if existing.startswith("BUMBLER_XD-v") and existing.endswith(".zip") and existing not in active_archives:
+        stale_path = os.path.join(release_dir, existing)
+        os.remove(stale_path)
+        print(f"Removed stale archive: {stale_path}")
 
 # 1. Package Windows-x64 full zip (Standalone + VST3 + docs + migrator)
-zip_path = os.path.join(release_dir, f"BUMBLER_XD-v{version}-Windows-x64.zip")
+zip_path = os.path.join(release_dir, full_zip_name)
 with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
     vst3_dir = os.path.join(build_dir, "VST3", "Bumbler XD.vst3")
     for root, dirs, files in os.walk(vst3_dir):
-        for f in files:
+        for f in sorted(files):
             full = os.path.join(root, f)
             rel = os.path.relpath(full, os.path.join(build_dir, "VST3"))
             zf.write(full, rel)
@@ -35,11 +47,11 @@ with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
 print(f"Created {zip_path}: {os.path.getsize(zip_path):,} bytes")
 
 # 2. Package VST3-only zip
-vst3_zip_path = os.path.join(release_dir, f"BUMBLER_XD-v{version}-VST3-Windows-x64.zip")
+vst3_zip_path = os.path.join(release_dir, vst3_zip_name)
 with zipfile.ZipFile(vst3_zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
     vst3_dir = os.path.join(build_dir, "VST3", "Bumbler XD.vst3")
     for root, dirs, files in os.walk(vst3_dir):
-        for f in files:
+        for f in sorted(files):
             full = os.path.join(root, f)
             rel = os.path.relpath(full, os.path.join(build_dir, "VST3"))
             zf.write(full, rel)
@@ -50,16 +62,18 @@ with zipfile.ZipFile(vst3_zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
 
 print(f"Created {vst3_zip_path}: {os.path.getsize(vst3_zip_path):,} bytes")
 
-# 3. Compute SHA-256 digests and write SHA256SUMS.txt
-def compute_sha256(filepath):
+
+# 3. Compute SHA-256 digests and write SHA256SUMS.txt (active v1.1.0 archives only)
+def compute_sha256(filepath: str) -> str:
     h = hashlib.sha256()
     with open(filepath, "rb") as f:
         for chunk in iter(lambda: f.read(65536), b""):
             h.update(chunk)
     return h.hexdigest()
 
+
 sha256_path = os.path.join(release_dir, "SHA256SUMS.txt")
-zip_files = sorted([f for f in os.listdir(release_dir) if f.endswith(".zip") and f.startswith("BUMBLER_XD")])
+zip_files = sorted(active_archives)
 
 checksum_lines = []
 for zfname in zip_files:

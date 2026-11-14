@@ -4,6 +4,8 @@ Automated GitHub Flavored Markdown (GFM) & KaTeX Math Compliance Linter.
 Validates markdown files against the strict rules in the github-math-compliance skill.
 """
 
+import glob
+import os
 import sys
 import re
 
@@ -19,14 +21,18 @@ def audit_file(filepath):
     for idx, line in enumerate(lines, 1):
         stripped = line.strip()
 
-        # Track fenced code blocks
+        # Track fenced code blocks and ```math fences independently
         if stripped.startswith('```') or stripped.startswith('~~~'):
-            if stripped.startswith('```math'):
-                in_math_fence = not in_math_fence
-                if not line.startswith('```math'):
-                    errors.append((idx, "Display math fence ```math must start at Column 0 (no indentation)"))
+            if in_math_fence:
+                in_math_fence = False
             elif in_code_block:
                 in_code_block = False
+            elif stripped.startswith('```math'):
+                in_math_fence = True
+                if not line.startswith('```math'):
+                    errors.append((idx, "Display math fence ```math must start at Column 0 (no indentation)"))
+                if idx > 1 and lines[idx - 2].strip() != '':
+                    errors.append((idx, "Display math fence ```math must be preceded by an empty blank line"))
             else:
                 in_code_block = True
             continue
@@ -131,9 +137,22 @@ def audit_file(filepath):
     return errors
 
 if __name__ == "__main__":
-    files = sys.argv[1:]
-    if not files:
+    raw_args = sys.argv[1:]
+    if not raw_args:
         files = ["README.md"]
+    else:
+        files = []
+        for arg in raw_args:
+            if any(ch in arg for ch in "*?["):
+                matched = sorted(glob.glob(arg, recursive=True))
+                if matched:
+                    files.extend(matched)
+                else:
+                    files.append(arg)
+            elif os.path.isdir(arg):
+                files.extend(sorted(glob.glob(os.path.join(arg, "**", "*.md"), recursive=True)))
+            else:
+                files.append(arg)
     total_errors = 0
     for fpath in files:
         errs = audit_file(fpath)

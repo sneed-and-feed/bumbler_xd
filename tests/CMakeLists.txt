@@ -301,3 +301,41 @@ target_link_libraries(bumbler_preset_migrator_cpp_tests PRIVATE
 )
 add_test(NAME PresetMigratorCppTests COMMAND bumbler_preset_migrator_cpp_tests)
 
+# 24. v1.1.0 Deep Audit Regression Suite (DSP, MIDI Panic, NaN Immunity, Migrator Bounds & UI Sync)
+add_executable(bumbler_v110_regression_tests
+    v110_regression_tests.cpp
+    ../source/plugin/PluginProcessor.cpp
+    ../source/plugin/PluginEditor.cpp
+    ../source/plugin/PresetMigrator.cpp
+    ../source/ui/BumblerLookAndFeel.cpp
+    ../source/ui/LCDGraphDisplay.cpp
+    ../source/ui/HorizontalFader.cpp
+)
+target_include_directories(bumbler_v110_regression_tests PRIVATE
+    ${TEST_COMMON_INCLUDES}
+    ${CMAKE_CURRENT_SOURCE_DIR}/../source/plugin
+    ${CMAKE_CURRENT_SOURCE_DIR}/../source/ui
+)
+if(MSVC)
+    target_compile_definitions(bumbler_v110_regression_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(bumbler_v110_regression_tests PRIVATE /utf-8 /W4 /O2 /fp:precise)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "AMD64|x86_64|x64")
+        target_compile_options(bumbler_v110_regression_tests PRIVATE /arch:AVX2)
+    endif()
+else()
+    target_compile_options(bumbler_v110_regression_tests PRIVATE -Wall -Wextra -O3)
+endif()
+target_link_libraries(bumbler_v110_regression_tests PRIVATE
+    bumbler_dsp_core
+    juce::juce_audio_basics
+    juce::juce_audio_devices
+    juce::juce_audio_formats
+    juce::juce_audio_plugin_client
+    juce::juce_audio_processors
+    juce::juce_audio_utils
+    juce::juce_gui_basics
+    juce::juce_gui_extra
+)
+add_test(NAME V110RegressionTests COMMAND bumbler_v110_regression_tests)
+
+

@@ -1,6 +1,6 @@
 # 📦 Bumbler XD Automation, Packaging & Preset Migration Scripts
 
-This directory contains development automation, distribution packaging, and legacy preset migration utilities for **Bumbler XD**.
+This directory contains development automation, distribution packaging, GFM math verification, and legacy preset migration utilities for **Bumbler XD (v1.1.0)**.
 
 ---
 
@@ -8,36 +8,40 @@ This directory contains development automation, distribution packaging, and lega
 
 | Script | Language | Dependencies | Primary Output | Description |
 |---|---|---|---|---|
-| [`import_wasp_presets.py`](import_wasp_presets.py) | Python 3.8+ | Standard Library | `presets/migrated/**/*.xml`, `PresetParameters.h` snippet | Legacy Wasp & Wasp XT preset migration tool (`.fxp`, `.fxb`, `.fst`, `.flp`). |
+| [`import_wasp_presets.py`](import_wasp_presets.py) | Python 3.8+ | Standard Library | `presets/migrated/**/*.xml`, `MigratedPresets.h` | Legacy Wasp & Wasp XT preset migration CLI & library (`.fxp`, `.fxb`, `.fst`, `.flp`, `.xml`). |
+| [`migrator_gui.py`](migrator_gui.py) | Python 3.8+ | Standard Library (`tkinter`) | `presets/migrated/**/*.xml` | Standalone dark-themed desktop graphical preset migrator utility (launched by `MigratePresets.bat` or `--gui`). |
 | [`generate_homage_presets.py`](generate_homage_presets.py) | Python 3.8+ | Standard Library | `presets/homage/**/*.xml` | Generates the 15 clean-room royalty-free homage preset library. |
-| [`package_release.py`](package_release.py) | Python 3.8+ | Standard Library | `releases/*.zip`, `releases/SHA256SUMS.txt` | Packages release archives and computes cryptographic SHA-256 digests. |
+| [`package_release.py`](package_release.py) | Python 3.8+ | Standard Library | `releases/*.zip`, `releases/SHA256SUMS.txt` | Packages `v1.1.0` release archives, prunes stale archives, and computes cryptographic SHA-256 digests. |
+| [`audit_gfm_math.py`](audit_gfm_math.py) | Python 3.8+ | Standard Library | Exit code `0` / `1` | Automated GitHub Flavored Markdown (GFM) & KaTeX math compliance linter across all documentation files. |
 
 ---
 
-## 🐝 `import_wasp_presets.py` (Preset Migration Importer)
+## 🐝 `import_wasp_presets.py` & `migrator_gui.py` (Preset Migration Importer)
 
 ### 1. Purpose
 
-The [`import_wasp_presets.py`](import_wasp_presets.py) utility enables producers and engineers to migrate legacy preset patches and project tracks from the discontinued **Wasp** and **Wasp XT** synthesizers into Bumbler XD's modern APVTS architecture.
+The [`import_wasp_presets.py`](import_wasp_presets.py) and [`migrator_gui.py`](migrator_gui.py) utilities enable producers and engineers to migrate legacy preset patches and project tracks from the discontinued **Wasp** and **Wasp XT** synthesizers into Bumbler XD's modern 55-parameter APVTS architecture.
 
 ### 2. Supported Legacy File Formats
 
-- **`.fxp` (VST 2.4 Preset)**: Parses standard `CcnK` container headers, handling both `FxCk` (regular 32-bit big-endian float parameter streams) and `FPCh` (opaque chunk presets).
+- **`.fxp` (VST 2.4 Preset)**: Parses standard `CcnK` container headers (`FxCk` 32-bit big-endian float parameter streams and `FPCh` opaque chunks) with strict bounds and finite-float sanitization.
 - **`.fxb` (VST 2.4 Bank)**: Extracts multi-program banks (`FxBk` and `FBCh`), generating individual XML files for each contained preset.
-- **`.fst` (FL Studio State File)**: Parses RIFF chunk containers (`FS_G`, `FS_C`, `data`, `plug`), IFF chunks, and embedded event streams to extract generator plugin state.
-- **`.flp` (FL Studio Project File)**: Scans the event stream for event `0xC5` (`FLP_PluginData`) on channels identifying as Wasp or Wasp XT, extracting channel sound design states.
+- **`.fst` (FL Studio State File)**: Parses RIFF chunk containers (`FS_G`, `FS_C`, `data`, `plug`), `FLhd`/`FLdt` native Wasp XT v13 float chunks, and v12 32-bit Delphi integer parameter chunks.
+- **`.flp` (FL Studio Project File)**: Scans event streams (`0xC9` plugin identification + `0xD5` / `0xC5` plugin state chunks) on channels identifying as Wasp or Wasp XT with bounded varint decoding.
+- **`.xml` (Bumbler XD Preset)**: Validates and sanitizes `<BumblerXD>` and `<Parameters>` XML presets against all 55 APVTS parameter ranges.
 
 ### 3. CLI Command Options
 
 ```text
-usage: import_wasp_presets.py [-h] --input INPUT [INPUT ...]
+usage: import_wasp_presets.py [-h] [--gui] [--input INPUT [INPUT ...]]
                               [--output-dir OUTPUT_DIR]
                               [--export-cpp [EXPORT_CPP]]
                               [--category CATEGORY] [--verbose] [--dry-run]
 
 Options:
+  --gui                 Launch the standalone Tkinter graphical preset migrator
   --input, -i INPUT [INPUT ...]
-                        Path to legacy preset file(s) or directory (.fxp, .fxb, .fst, .flp)
+                        Path to legacy preset file(s) or directory (.fxp, .fxb, .fst, .flp, .xml)
   --output-dir, -o OUTPUT_DIR
                         Destination directory for generated JUCE APVTS XML presets (default: presets/migrated)
   --export-cpp, -c [EXPORT_CPP]
@@ -48,6 +52,12 @@ Options:
 ```
 
 ### 4. Migration Usage Examples
+
+#### Graphical Desktop Migrator
+```bash
+# Launch standalone GUI migrator (or double-click MigratePresets.bat on Windows)
+python scripts/import_wasp_presets.py --gui
+```
 
 #### Single Preset Migration
 ```bash
@@ -96,7 +106,7 @@ Outputs are placed in `presets/homage/<Category>/<Preset_Name>.xml`.
 
 ### 1. Purpose
 
-Automates the creation of release distribution archives from compiled build artifacts produced by CMake and JUCE 8. It packages standalone executables and VST3 plugin bundles, includes necessary project documentation and licensing, and computes cryptographically secure SHA-256 digests.
+Automates the creation of release distribution archives from compiled build artifacts produced by CMake and JUCE 8. It packages standalone executables and VST3 plugin bundles, includes project documentation, licensing, and migration scripts, removes stale archives from previous versions, and computes cryptographically secure SHA-256 digests.
 
 ### 2. Prerequisites & Build
 
@@ -112,16 +122,25 @@ python scripts/package_release.py
 ```
 
 All packaged files are staged into the `releases/` directory:
-- `releases/BUMBLER_XD-v1.0.7-Windows-x64.zip` (Full distribution package)
-- `releases/BUMBLER_XD-v1.0.7-VST3-Windows-x64.zip` (VST3-only package)
-- `releases/SHA256SUMS.txt` (Cryptographic checksum manifest)
+- `releases/BUMBLER_XD-v1.1.0-Windows-x64.zip` (Full distribution package: `.vst3` + `Bumbler XD.exe` + migrator tools + docs)
+- `releases/BUMBLER_XD-v1.1.0-VST3-Windows-x64.zip` (VST3-only package: `.vst3` + docs)
+- `releases/SHA256SUMS.txt` (Cryptographic checksum manifest for active `v1.1.0` archives)
+
+---
+
+## 📐 `audit_gfm_math.py` (GFM & KaTeX Math Linter)
+
+```bash
+# Verify 100% GitHub Flavored Markdown & KaTeX compliance across all repository docs
+python scripts/audit_gfm_math.py README.md CHANGELOG.md BENCHMARKS.md TEST_READY.md "docs/*.md" "scripts/*.md" "presets/homage/*.md" "tests/*.md" "tests/fixtures/*.md" ".github/*.md"
+```
 
 ---
 
 ## 🧪 Automated Testing
 
-To run the automated Python test suite for the preset migration importer and file parsers:
+To run the automated Python unit test suite (22 tests) for the preset migration importer and file parsers:
 
 ```bash
-python tests/test_preset_importer.py -v
+python -m pytest tests/test_preset_importer.py -v
 ```

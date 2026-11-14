@@ -21,7 +21,7 @@ The testing methodology for **Bumbler XD** is governed by five core engineering 
    For every single test case across all tiers, expected values are derived from authoritative mathematical equations and physical laws:
    - *Filter Roll-Off Slopes*: Closed-form 2-pole (-12 dB/oct) and 4-pole (-24 dB/oct) transfer function magnitudes $|H(j\omega)|$.
    - *Frequency Modulation Sidebands*: Jacobi-Anger expansion and Bessel function distribution ratios $J_n(\beta)$.
-   - *Ring Modulation Spectrum*: Analytical sum ($f_1 + f_2$) and difference ($|f_1 - f_2|$) frequencies with zero carrier bleed.
+   - *Ring Modulation Spectrum*: Analytical sum and difference frequencies $(f_1 + f_2, \; \lvert f_1 - f_2 \rvert)$ with zero carrier bleed.
    - *Stereo Decorrelation*: Pearson cross-correlation coefficient $r = \frac{\sum L[n] R[n]}{\sqrt{\sum L[n]^2 \sum R[n]^2}} < 0.70$.
    - *Pitch Drift & Jitter*: Statistical sample variance $\sigma^2 > 0$ across repeated note triggers.
    - *Spectral Energy Distribution*: Discrete single-bin Fourier analysis $H_k = \frac{2}{N}\left|\sum x[n] e^{-j 2\pi k n / N}\right|$.
@@ -101,16 +101,16 @@ Each feature F1 through F36 contains 5 isolated verification checks:
 - **F2 (Polyphonic Voice Manager)**: Single note allocation, 16-voice polyphony saturation, LRU oldest-voice stealing, note-off release transition, 5ms Hann de-click windowing.
 - **F3 (OSC 1 Multi-waveform)**: Sawtooth spectral decay ($1/k$), Square wave odd-harmonic series ($1/k$), Sine wave purity ($THD < 0.05\%$), Noise energy distribution, Coarse/fine pitch tuning accuracy within 0.1 cents.
 - **F4 (OSC 2 Multi-waveform)**: Waveform selection (Saw, Square, Sine, Noise), Coarse tuning across -3 to +3 octaves, Fine tuning across -100 to +100 cents, Anti-aliasing suppression above Nyquist, Amplitude stability.
-- **F5 (OSC 3 Aux Sub-Osc)**: Square wave generation at 1 octave sub, Sawtooth generation at 1 octave sub, Zero level inaudibility ($<-96$ dBFS), Linear gain scaling up to 1.0, Phase alignment with OSC 1.
+- **F5 (OSC 3 Aux Sub-Osc)**: Square wave generation tracking voice fundamental, Sawtooth generation tracking voice fundamental, Zero level inaudibility ($<-96$ dBFS), Linear gain scaling up to 1.0, Phase alignment with OSC 1.
 - **F6 (OSC Balance Slider)**: Mix at 0.0 delivers pure OSC 1, Mix at 1.0 delivers pure OSC 2, Mix at 0.5 delivers equal sum, Continuous monotonic gain transition, Zero distortion during crossfade.
-- **F7 (Ring Modulator)**: Sum frequency generation ($f_1 + f_2$), Difference frequency generation ($|f_1 - f_2|$), Carrier suppression ($>40$ dB), DC offset suppression ($< 10^{-4}$), Enable/disable bypass fidelity.
+- **F7 (Ring Modulator)**: Sum and difference frequency generation $(f_1 + f_2, \; \lvert f_1 - f_2 \rvert)$, Carrier suppression ($>40$ dB), DC offset suppression ($< 10^{-4}$), Enable/disable bypass fidelity.
 - **F8 (Pulse Width Modulation)**: 50% duty square symmetry, 25% narrow pulse duty cycle, 75% wide pulse duty cycle, 1% extreme pulse boundary, Continuous PW modulation without DC spike.
-- **F9 (Frequency Modulation)**: Carrier at $f_c$ with single sidebands at $f_c \pm f_m$, Second-order sidebands at $f_c \pm 2f_m$, Modulation index scaling, Carrier amplitude reduction matching $J_0(\beta)$, Enable/disable bypass.
+- **F9 (Frequency Modulation)**: Carrier with first- and second-order Bessel sidebands $(f_c \pm f_m, \; f_c \pm 2f_m, \; J_0(\beta))$, Modulation index scaling, Carrier amplitude reduction, Enable/disable bypass.
 - **F10 (Velocity Sensitivity)**: Velocity 127 maximum amplitude, Velocity 1 minimum audible amplitude, Velocity 64 intermediate scaling, Velocity routing to Filter cutoff depth, Zero velocity ignored.
 - **F11 (Filter LP 12dB)**: Cutoff at 1 kHz with 0 dB passband, 12 dB/octave attenuation slope above 1 kHz, Resonance peak at cutoff, Phase response through cutoff, Stability under high resonance.
 - **F12 (Filter LP FAT 24dB)**: 24 dB/octave attenuation slope above cutoff, 4-pole cascaded steepness, Saturation knee under high resonance, Bass preservation ("FAT" tuning), Monotonic attenuation above cutoff.
 - **F13 (Filter LP+NT Cascade)**: Lowpass roll-off above 2 kHz, Notch attenuation dip ($>20$ dB) at center frequency, Combined transfer magnitude, Resonance peak shaping, Transient stability.
-- **F14 (Filter Double Notch DBL.NT)**: Identification of first notch null $f_1$, Identification of second notch null $f_2$, Passband peak between twin notches, Attenuation depth ($>18$ dB each), Symmetrical tracking across cutoff sweeps.
+- **F14 (Filter Double Notch DBL.NT)**: Identification of twin notch nulls $(f_1, f_2)$, Passband peak between twin notches, Attenuation depth ($>18$ dB each), Symmetrical tracking across cutoff sweeps.
 - **F15 (Filter BP 24dB)**: Low-end attenuation below 500 Hz ($>12$ dB), High-end attenuation above 2 kHz ($>12$ dB), Unity gain passband at center frequency, Q factor sharpness scaling, Zero DC transmission.
 - **F16 (Filter HP 24dB)**: 24 dB/octave attenuation slope below cutoff, 0 dB passband above cutoff, High resonance peaking at cutoff, Rejection of low-frequency rumble, Clean transient step response.
 - **F17 (Filter Keyboard Tracking)**: Tracking ratio 1.0 shifts cutoff 1 semitone per MIDI note, Tracking ratio 0.5 shifts cutoff 0.5 semitones per note, Tracking ratio 0.0 leaves cutoff unchanged, Base note C4 (MIDI 60) reference, High-note clamping below Nyquist.
@@ -141,8 +141,7 @@ Each feature F1 through F36 contains 5 isolated verification checks:
 Tier 2 stresses the engine at physical, computational, and numerical limits:
 
 1. **Multi-Rate Invariance**:  
-   Audio processing is verified at sample rates: 44.1 kHz, 48 kHz, 88.2 kHz, 96 kHz, 176.4 kHz, 192 kHz. Filters, envelopes, and LFOs dynamically scale time constants:
-   $$\alpha = 1 - e^{-\frac{1}{\tau \cdot f_s}}$$
+   Audio processing is verified at sample rates: 44.1 kHz, 48 kHz, 88.2 kHz, 96 kHz, 176.4 kHz, 192 kHz. Filters, envelopes, and LFOs dynamically scale time constants $(\alpha = 1 - e^{-1 / (\tau \cdot f_s)})$.
 
 2. **Buffer Size Stress**:  
    Processing blocks of size $1, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192$ samples. Verifies zero buffer overrun, zero pointer miscalculation, and correct voice state preservation across arbitrary block divisions.
@@ -220,7 +219,7 @@ Tier 4 validates full-system performance under realistic studio workloads:
 
 ### 4.1 Filter Roll-Off Slope Verification
 To verify `ORIGINAL_REQUEST.md` acceptance criteria:
-1. Configure filter at $f_c = 1000\text{ Hz}$, $Q = 0.7071$, sample rate $f_s = 48000\text{ Hz}$.
+1. Configure filter at $(f_c = 1000\text{ Hz}, \; Q = 0.7071, \; f_s = 48000\text{ Hz})$.
 2. Inject steady-state sine probes at frequencies $f = [250, 500, 1000, 2000, 4000]\text{ Hz}$.
 3. Discard initial 2,048 transient samples; calculate steady-state peak amplitude $A(f)$ over 4,096 samples.
 4. Convert to decibels: $L(f) = 20\log_{10}(A(f))$.
@@ -247,8 +246,7 @@ To verify `ORIGINAL_REQUEST.md` acceptance criteria:
 ### 4.3 Character Circuits Verification
 1. **Dual Mode Stereo Widening**:
    - Render 4,096 samples with Dual Mode OFF. Assert $L[n] == R[n]$ (correlation $r = 1.000$).
-   - Enable Dual Mode. Compute Pearson correlation:
-     $$r = \frac{\sum_{n=0}^{N-1} L[n] R[n]}{\sqrt{\sum L[n]^2 \sum R[n]^2}}$$
+   - Enable Dual Mode. Compute Pearson correlation ($r = \frac{\sum_{n=0}^{N-1} L[n] R[n]}{\sqrt{\sum L[n]^2 \sum R[n]^2}}$).
    - Assert $r < 0.70$ and verify amplitude beating periodicity matching voice detuning.
 2. **Analog Mode Pitch Drift**:
    - Trigger 10 identical MIDI Note 60 events with Analog Mode OFF. Assert identical waveform output ($\sigma^2 = 0.0$).
@@ -264,13 +262,16 @@ To verify `ORIGINAL_REQUEST.md` acceptance criteria:
 
 ## 5. Test Suite Architecture in `tests/`
 
-The test suite is organized into modular native C++20 test runners registered with CMake and CTest:
+The test suite is organized into 24 modular native C++20 test runners registered with CMake and CTest (including unit, empirical frequency response, adversarial stress, APVTS state recall, GUI lifecycle, golden vector, C++ preset migrator, and v1.1.0 deep-audit regression suites):
 
-1. `tests/filter_accuracy_tests.cpp`: Frequency response sweeps and roll-off slope validations for all 6 filter modes.
-2. `tests/modulation_tests.cpp`: Ring modulation sum/difference, FM Bessel sidebands, LFO routing matrix, and envelope curves.
-3. `tests/character_circuit_tests.cpp`: Dual mode stereo decorrelation, Analog pitch drift variance, Distortion saturation, Tone shaping, and W.Noise spectra.
-4. `tests/realtime_safety_tests.cpp`: Real-time heap allocation interceptor, denormal FTZ/DAZ protection, and multi-rate/block-size stability.
-5. `tests/e2e_headless_suite.cpp`: Master acceptance test runner aggregating all tiers and certifying compliance with `ORIGINAL_REQUEST.md`.
+1. `tests/dsp_unit_tests.cpp`: Core DSP unit tests (voice allocation, PolyBLEP oscillators, FM, RingMod, PWM, zero heap allocations).
+2. `tests/filter_accuracy_tests.cpp`: Frequency response sweeps and roll-off slope validations for all 6 filter modes.
+3. `tests/modulation_tests.cpp`: Ring modulation sum/difference, FM Bessel sidebands, LFO routing matrix, and envelope curves.
+4. `tests/character_circuit_tests.cpp`: Dual mode stereo decorrelation, Analog pitch drift variance, Distortion saturation, Tone shaping, and W.Noise spectra.
+5. `tests/realtime_safety_tests.cpp`: Real-time heap allocation interceptor, denormal FTZ/DAZ protection, and multi-rate/block-size stability.
+6. `tests/e2e_headless_suite.cpp`: Master acceptance test runner aggregating all tiers and certifying compliance with `ORIGINAL_REQUEST.md`.
+7. `tests/golden_vector_tests.cpp`: Deterministic golden vector regression suite (`SNR > 120 dB`, `maxDelta < 1e-4`).
+8. `tests/preset_migrator_cpp_tests.cpp` & `tests/v110_regression_tests.cpp`: Legacy binary/XML preset migration, MIDI CC 120/121/123 panic state machines, near-Nyquist PolyBLEP symmetry, `DBL_NT` sub-block smoothing, and direct `NaN`/`Inf` immunity across all DSP modules.
 
 ---
 
@@ -282,9 +283,9 @@ To execute the complete E2E test suite:
 # 1. Configure CMake with CTest enabled
 cmake -B build -G "Visual Studio 17 2022" -A x64 -DCMAKE_BUILD_TYPE=Release -DBUMBLER_BUILD_TESTS=ON
 
-# 2. Build test executables
-cmake --build build --config Release --target bumbler_e2e_tests --parallel
+# 2. Build all Release targets and test executables
+cmake --build build --config Release --parallel
 
-# 3. Run CTest
+# 3. Run all 24 CTest suites
 ctest --test-dir build -C Release --output-on-failure
 ```

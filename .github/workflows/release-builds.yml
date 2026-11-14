@@ -30,7 +30,7 @@ jobs:
       - name: Package macOS Universal Zip
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          [ -z "$VERSION" ] && VERSION="1.0.0"
+          [ -z "$VERSION" ] && VERSION="1.1.0"
           mkdir -p package/VST3 package/AU package/Standalone
 
           find build -type d -name "Bumbler XD.vst3" -exec cp -R {} package/VST3/ \;
@@ -103,7 +103,7 @@ jobs:
       - name: Package Linux x64 Zip
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          [ -z "$VERSION" ] && VERSION="1.0.0"
+          [ -z "$VERSION" ] && VERSION="1.1.0"
           mkdir -p package/VST3 package/Standalone
 
           find build -type d -name "Bumbler XD.vst3" -exec cp -R {} package/VST3/ \;

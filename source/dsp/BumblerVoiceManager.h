@@ -67,6 +67,7 @@ public:
     void reset() noexcept;
 
     // MIDI Note & Transport Dispatch
+    void syncTriggerParameters(const ParameterSnapshot& params) noexcept;
     void noteOn(int midiNote, float velocity) noexcept;
     void noteOff(int midiNote, float velocity = 0.0f) noexcept;
     void setSustainPedal(bool pedalDown) noexcept;
